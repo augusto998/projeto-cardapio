@@ -1,10 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Clock3, MapPin, MessageCircle, Phone, X } from 'lucide-react';
+import AdminApp from './admin/AdminApp';
 import { menuData } from './data/menu';
 import { loadPublicMenuData } from './data/menuRepository';
 import type { MenuItem } from './types/menu';
 
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function App() {
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const updatePathname = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', updatePathname);
+    return () => window.removeEventListener('popstate', updatePathname);
+  }, []);
+
+  if (pathname === '/admin' || pathname === '/admin/' || pathname === '/admin/dashboard') {
+    return <AdminApp pathname={pathname} />;
+  }
+
+  return <PublicMenuApp />;
+}
 
 function PitangaMark() {
   return (
@@ -18,7 +35,7 @@ function PitangaMark() {
   );
 }
 
-function App() {
+function PublicMenuApp() {
   const [menu, setMenu] = useState(menuData);
   const [activeCategory, setActiveCategory] = useState('Tudo');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);

@@ -1,0 +1,206 @@
+.admin-page {
+  min-height: 100vh;
+  padding: 40px 20px;
+  color: #24352b;
+  background: #f5f2e9;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.admin-panel,
+.admin-dashboard {
+  width: min(100%, 920px);
+  margin: 0 auto;
+}
+
+.admin-panel {
+  max-width: 440px;
+  padding: 32px;
+  border: 1px solid rgba(49, 87, 67, .14);
+  border-radius: 20px;
+  background: #fffdf8;
+  box-shadow: 0 16px 40px rgba(34, 49, 39, .08);
+}
+
+.admin-eyebrow {
+  margin: 0 0 8px;
+  color: #728173;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.admin-panel h1,
+.admin-dashboard h1 {
+  margin: 0;
+  color: #244133;
+  font: 600 clamp(28px, 5vw, 40px)/1.1 Fraunces, Georgia, serif;
+}
+
+.admin-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.admin-form label {
+  margin-top: 8px;
+  color: #405548;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #d7ddd5;
+  border-radius: 9px;
+  color: #24352b;
+  background: #fff;
+  font: inherit;
+}
+
+.admin-form input:focus {
+  outline: 2px solid #8aa58e;
+  outline-offset: 2px;
+}
+
+.admin-primary-button,
+.admin-secondary-button {
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 9px;
+  font: 600 14px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.admin-primary-button {
+  margin-top: 12px;
+  color: white;
+  background: #315743;
+}
+
+.admin-secondary-button {
+  color: #315743;
+  background: #e8eee7;
+}
+
+.admin-primary-button:disabled,
+.admin-secondary-button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.admin-secondary-link {
+  display: inline-block;
+  margin-top: 22px;
+  color: #315743;
+  font-size: 13px;
+  text-underline-offset: 3px;
+}
+
+.admin-error {
+  color: #9b312b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-message {
+  color: #617067;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.admin-dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid rgba(49, 87, 67, .18);
+}
+
+.admin-status {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 5px 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-status.is-public {
+  color: #275d3e;
+  background: #dceee0;
+}
+
+.admin-status.is-private {
+  color: #775b25;
+  background: #f4ebd3;
+}
+
+.admin-section {
+  margin-top: 30px;
+}
+
+.admin-section h2 {
+  margin: 0 0 14px;
+  color: #244133;
+  font: 600 23px Fraunces, Georgia, serif;
+}
+
+.admin-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 16px;
+  border: 1px solid rgba(49, 87, 67, .12);
+  border-radius: 12px;
+  background: #fffdf8;
+}
+
+.admin-sort-order,
+.admin-product-meta span {
+  color: #728173;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.admin-product-details,
+.admin-product-meta {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-product-details {
+  min-width: 0;
+}
+
+.admin-product-details > span {
+  overflow-wrap: anywhere;
+  color: #617067;
+  font-size: 13px;
+}
+
+.admin-product-meta {
+  justify-items: end;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .admin-page { padding: 24px 15px; }
+  .admin-panel { padding: 24px 20px; }
+  .admin-product-row { align-items: flex-start; flex-direction: column; }
+  .admin-product-meta { justify-items: start; text-align: left; }
+}
