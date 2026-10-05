@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Clock3, MapPin, MessageCircle, Phone, X } from 'lucide-react';
 import AdminApp from './admin/AdminApp';
 import { menuData } from './data/menu';
-import { loadPublicMenuData } from './data/menuRepository';
-import type { MenuItem, PublicMenuData } from './types/menu';
+import { loadPublicMenuData, type PublicMenuResult } from './data/menuRepository';
+import type { MenuItem } from './types/menu';
 
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -36,13 +36,14 @@ function PitangaMark() {
 }
 
 function PublicMenuApp() {
-  const [menu, setMenu] = useState<PublicMenuData | null | undefined>(undefined);
+  const [menuResult, setMenuResult] = useState<PublicMenuResult | undefined>(undefined);
   const [activeCategory, setActiveCategory] = useState('Tudo');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const { restaurant, contacts, categories: menuCategories, items } = menu ?? menuData;
+  const menu = menuResult?.status === 'ready' ? menuResult.data : menuData;
+  const { restaurant, contacts, categories: menuCategories, items } = menu;
   const categories = ['Tudo', ...menuCategories.map((category) => category.name)];
   const whatsappBase = `https://wa.me/${contacts.whatsapp.number}`;
   const visibleCategories = menuCategories;
@@ -53,7 +54,7 @@ function PublicMenuApp() {
   useEffect(() => {
     let isCurrent = true;
     void loadPublicMenuData().then((loadedMenu) => {
-      if (isCurrent) setMenu(loadedMenu);
+      if (isCurrent) setMenuResult(loadedMenu);
     });
     return () => {
       isCurrent = false;
@@ -130,11 +131,19 @@ function PublicMenuApp() {
     return () => window.removeEventListener('scroll', updateScrollState);
   }, []);
 
-  if (menu === undefined) {
+  if (menuResult === undefined) {
     return <main className="menu-availability-state" role="status">Carregando cardápio…</main>;
   }
 
-  if (menu === null) {
+  if (menuResult.status === 'no-selection') {
+    return (
+      <main className="menu-availability-state" role="status">
+        Nenhum restaurante selecionado. Acesse este cardápio com ?restaurante=slug.
+      </main>
+    );
+  }
+
+  if (menuResult.status === 'unavailable') {
     return (
       <main className="menu-availability-state" role="status">
         Este cardápio está indisponível no momento.
