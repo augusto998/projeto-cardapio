@@ -218,9 +218,9 @@ async function sendOwnerAccessEmail(
     body: JSON.stringify({
       from,
       to: [email],
-      subject: "Acesse o painel do seu restaurante",
-      text: `Use este link para acessar o painel: ${actionLink}`,
-      html: `<p>Seu restaurante está pronto. Use o link abaixo para acessar o painel:</p><p><a href="${safeLink}">Acessar painel</a></p>`,
+      subject: "Configure o acesso ao painel do seu restaurante",
+      text: `Use este link para entrar no painel e definir sua senha: ${actionLink}`,
+      html: `<p>Seu restaurante está pronto. Use o link abaixo para entrar no painel e definir sua senha:</p><p><a href="${safeLink}">Acessar painel</a></p>`,
     }),
   });
   return response.ok;
@@ -229,27 +229,6 @@ async function sendOwnerAccessEmail(
 const provisionRequest = withSupabase(
   { auth: "user", cors: "disabled" },
   async (request, ctx): Promise<Response> => {
-  const resendApiKey = Deno.env.get("RESEND_API_KEY");
-  const emailFrom = Deno.env.get("PROVISIONING_EMAIL_FROM");
-  const redirectUrl = Deno.env.get("PROVISIONING_REDIRECT_URL");
-  const allowedOrigins = parseAllowedOrigins();
-  if (
-    !resendApiKey || !emailFrom || !redirectUrl
-  ) {
-    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500);
-  }
-  try {
-    const parsedRedirectUrl = new URL(redirectUrl);
-    if (
-      parsedRedirectUrl.protocol !== "https:" ||
-      !allowedOrigins.has(parsedRedirectUrl.origin)
-    ) {
-      throw new Error("invalid_redirect_url");
-    }
-  } catch {
-    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500);
-  }
-
   const userId = ctx.userClaims?.id;
   if (!userId) {
     return jsonResponse({ error: "Autenticação obrigatória." }, 401);
@@ -264,6 +243,29 @@ const provisionRequest = withSupabase(
   }
   if (!isPlatformAdmin) {
     return jsonResponse({ error: "Acesso não autorizado." }, 403);
+  }
+
+  if (request.method === "GET") {
+    return jsonResponse({ status: "platform_admin" }, 200);
+  }
+
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  const emailFrom = Deno.env.get("PROVISIONING_EMAIL_FROM");
+  const redirectUrl = Deno.env.get("PROVISIONING_REDIRECT_URL");
+  const allowedOrigins = parseAllowedOrigins();
+  if (!resendApiKey || !emailFrom || !redirectUrl) {
+    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500);
+  }
+  try {
+    const parsedRedirectUrl = new URL(redirectUrl);
+    if (
+      parsedRedirectUrl.protocol !== "https:" ||
+      !allowedOrigins.has(parsedRedirectUrl.origin)
+    ) {
+      throw new Error("invalid_redirect_url");
+    }
+  } catch {
+    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500);
   }
 
   let rawBody: unknown;
@@ -396,14 +398,14 @@ Deno.serve(async (request: Request): Promise<Response> => {
         headers: {
           "Access-Control-Allow-Origin": origin,
           "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info, x-retry-count",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
           "Vary": "Origin",
         },
       });
     }
     return new Response(null, { status: 204 });
   }
-  if (request.method !== "POST") {
+  if (request.method !== "POST" && request.method !== "GET") {
     const response = jsonResponse({ error: "Método não permitido." }, 405);
     if (origin && allowedOrigins.has(origin)) {
       response.headers.set("Access-Control-Allow-Origin", origin);
@@ -418,7 +420,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const headers = new Headers(response.headers);
   headers.set("Access-Control-Allow-Origin", origin);
   headers.set("Access-Control-Allow-Headers", "authorization, apikey, content-type, x-client-info, x-retry-count");
-  headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   headers.set("Vary", "Origin");
   return new Response(response.body, {
     status: response.status,

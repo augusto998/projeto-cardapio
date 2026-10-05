@@ -131,6 +131,27 @@
   border-bottom: 1px solid rgba(49, 87, 67, .18);
 }
 
+.admin-section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.admin-section-nav a {
+  padding: 7px 11px;
+  border: 1px solid rgba(49, 87, 67, .2);
+  border-radius: 999px;
+  color: #315743;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.admin-section-nav a:hover,
+.admin-section-nav a:focus-visible {
+  background: #f4ebd3;
+}
+
 .admin-status {
   display: inline-block;
   margin-top: 14px;

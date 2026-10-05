@@ -50,9 +50,9 @@ export async function loadPublicMenuData(): Promise<PublicMenuResult> {
     const { data: restaurant, error: restaurantError } = await supabase
       .from('restaurants')
       .select('id, name, description, logo_url, telefone, whatsapp')
-      .returns<RestaurantRow[]>()
       .eq('slug', restaurantSlug)
       .eq('is_public', true)
+      .returns<RestaurantRow[]>()
       .maybeSingle();
 
     if (restaurantError) throw restaurantError;
@@ -62,17 +62,17 @@ export async function loadPublicMenuData(): Promise<PublicMenuResult> {
       supabase
         .from('categories')
         .select('id, name, sort_order')
-        .returns<CategoryRow[]>()
         .eq('restaurant_id', restaurant.id)
-        .order('sort_order'),
+        .order('sort_order')
+        .returns<CategoryRow[]>(),
       supabase
         .from('products')
         .select('id, category_id, name, description, detail, price, is_available, image_url, image_alt, sort_order')
-        .returns<ProductRow[]>()
         .eq('restaurant_id', restaurant.id)
         .eq('is_available', true)
         .not('category_id', 'is', null)
-        .order('sort_order'),
+        .order('sort_order')
+        .returns<ProductRow[]>(),
     ]);
 
     if (categoriesResult.error) throw categoriesResult.error;

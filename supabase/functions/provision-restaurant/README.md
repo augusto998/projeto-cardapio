@@ -58,6 +58,12 @@ included in the response.
 
 ## Request
 
+An authenticated `GET` checks whether the current caller is an active platform
+administrator and returns only a status flag. An ordinary restaurant owner or
+admin receives `403`. This is used to choose the correct `/admin` view; it is
+not a substitute for the authorization checks repeated by the provisioning
+RPCs.
+
 The only accepted JSON properties are `name`, `slug`, `email`, `telefone`,
 `whatsapp`, and `logo_url`. The last three are optional. The function derives
 all user and restaurant identifiers, sets the owner role server-side, and
