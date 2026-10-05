@@ -28,6 +28,7 @@ type Product = {
   detail: string | null;
   price: number;
   image_url: string | null;
+  image_alt: string | null;
   is_available: boolean;
   sort_order: number;
 };
@@ -39,6 +40,7 @@ type DashboardData = {
 };
 
 type CategoryOperation = 'create' | `update:${string}` | `delete:${string}` | null;
+type ProductOperation = 'create' | `update:${string}` | `delete:${string}` | `toggle:${string}` | null;
 
 type MembershipState =
   | { status: 'idle' | 'loading' }
@@ -71,6 +73,19 @@ function AdminApp({ pathname }: { pathname: string }) {
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [categoryOperation, setCategoryOperation] = useState<CategoryOperation>(null);
   const [categoryMessage, setCategoryMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [productName, setProductName] = useState('');
+  const [productDescription, setProductDescription] = useState('');
+  const [productDetail, setProductDetail] = useState('');
+  const [productPrice, setProductPrice] = useState('');
+  const [productCategoryId, setProductCategoryId] = useState('');
+  const [productImageUrl, setProductImageUrl] = useState('');
+  const [productImageAlt, setProductImageAlt] = useState('');
+  const [productIsAvailable, setProductIsAvailable] = useState(true);
+  const [productOrder, setProductOrder] = useState('0');
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [productOperation, setProductOperation] = useState<ProductOperation>(null);
+  const [productMessage, setProductMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const authEventVersion = useRef(0);
   const isDashboardPath = pathname === '/admin/dashboard';
 
@@ -155,7 +170,7 @@ function AdminApp({ pathname }: { pathname: string }) {
             .order('sort_order'),
           supabase
             .from('products')
-            .select('id, category_id, name, description, detail, price, image_url, is_available, sort_order')
+            .select('id, category_id, name, description, detail, price, image_url, image_alt, is_available, sort_order')
             .returns<Product[]>()
             .eq('restaurant_id', restaurantId)
             .order('sort_order'),
@@ -260,6 +275,19 @@ function AdminApp({ pathname }: { pathname: string }) {
           ...current.data,
           categories: update(current.data.categories).sort((a, b) => a.sort_order - b.sort_order),
           products: updateProducts(current.data.products),
+        },
+      };
+    });
+  };
+
+  const updateProductList = (restaurantId: string, update: (products: Product[]) => Product[]) => {
+    setMembership((current) => {
+      if (current.status !== 'ready' || current.data.restaurant.id !== restaurantId) return current;
+      return {
+        ...current,
+        data: {
+          ...current.data,
+          products: update(current.data.products).sort((a, b) => a.sort_order - b.sort_order),
         },
       };
     });
@@ -380,6 +408,195 @@ function AdminApp({ pathname }: { pathname: string }) {
       });
     } finally {
       setCategoryOperation(null);
+    }
+  };
+
+  const resetProductForm = () => {
+    setProductName('');
+    setProductDescription('');
+    setProductDetail('');
+    setProductPrice('');
+    setProductCategoryId('');
+    setProductImageUrl('');
+    setProductImageAlt('');
+    setProductIsAvailable(true);
+    setProductOrder('0');
+    setEditingProductId(null);
+    setShowProductForm(false);
+  };
+
+  const beginProductEdit = (product: Product) => {
+    setEditingProductId(product.id);
+    setProductName(product.name);
+    setProductDescription(product.description ?? '');
+    setProductDetail(product.detail ?? '');
+    setProductPrice(String(product.price));
+    setProductCategoryId(product.category_id ?? '');
+    setProductImageUrl(product.image_url ?? '');
+    setProductImageAlt(product.image_alt ?? '');
+    setProductIsAvailable(product.is_available);
+    setProductOrder(String(product.sort_order));
+    setShowProductForm(true);
+    setProductMessage(null);
+  };
+
+  const handleProductSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase || membership.status !== 'ready') return;
+
+    const name = productName.trim();
+    const priceInput = productPrice.trim();
+    const orderInput = productOrder.trim();
+    if (!name) {
+      setProductMessage({ type: 'error', text: 'Informe o nome do produto.' });
+      return;
+    }
+    if (!priceInput) {
+      setProductMessage({ type: 'error', text: 'Informe o preço do produto.' });
+      return;
+    }
+    const price = Number(priceInput);
+    if (!Number.isFinite(price) || price < 0) {
+      setProductMessage({ type: 'error', text: 'O preço deve ser um número finito igual ou maior que zero.' });
+      return;
+    }
+    if (!orderInput) {
+      setProductMessage({ type: 'error', text: 'Informe a ordem do produto.' });
+      return;
+    }
+    const sortOrder = Number(orderInput);
+    if (!Number.isFinite(sortOrder) || !Number.isInteger(sortOrder) || sortOrder < 0) {
+      setProductMessage({ type: 'error', text: 'A ordem deve ser um número inteiro igual ou maior que zero.' });
+      return;
+    }
+
+    const { restaurant, categories } = membership.data;
+    const categoryId = productCategoryId || null;
+    if (categoryId && !categories.some((category) => category.id === categoryId)) {
+      setProductMessage({ type: 'error', text: 'Selecione uma categoria válida deste restaurante.' });
+      return;
+    }
+
+    const editingId = editingProductId;
+    setProductOperation(editingId ? `update:${editingId}` : 'create');
+    setProductMessage(null);
+
+    const values = {
+      name,
+      description: productDescription.trim() || null,
+      detail: productDetail.trim() || null,
+      price,
+      category_id: categoryId,
+      image_url: productImageUrl.trim() || null,
+      image_alt: productImageAlt.trim() || null,
+      is_available: productIsAvailable,
+      sort_order: sortOrder,
+    };
+
+    try {
+      let savedProduct: Product;
+      if (editingId) {
+        const { data, error } = await supabase
+          .from('products')
+          .update(values)
+          .eq('id', editingId)
+          .eq('restaurant_id', restaurant.id)
+          .select('id, category_id, name, description, detail, price, image_url, image_alt, is_available, sort_order')
+          .returns<Product[]>()
+          .single();
+        if (error) throw error;
+        savedProduct = data;
+      } else {
+        const { data, error } = await supabase
+          .from('products')
+          .insert({ ...values, restaurant_id: restaurant.id })
+          .select('id, category_id, name, description, detail, price, image_url, image_alt, is_available, sort_order')
+          .returns<Product[]>()
+          .single();
+        if (error) throw error;
+        savedProduct = data;
+      }
+
+      updateProductList(restaurant.id, (products) => editingId
+        ? products.map((product) => product.id === editingId ? savedProduct : product)
+        : [...products, savedProduct]);
+      resetProductForm();
+      setProductMessage({
+        type: 'success',
+        text: editingId ? 'Produto atualizado.' : 'Produto criado.',
+      });
+    } catch (error) {
+      setProductMessage({
+        type: 'error',
+        text: `Não foi possível salvar o produto: ${getErrorMessage(error)}`,
+      });
+    } finally {
+      setProductOperation(null);
+    }
+  };
+
+  const handleProductDelete = async (product: Product) => {
+    if (!supabase || membership.status !== 'ready') return;
+    if (!window.confirm(`Excluir o produto "${product.name}"?`)) return;
+
+    const restaurantId = membership.data.restaurant.id;
+    setProductOperation(`delete:${product.id}`);
+    setProductMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', product.id)
+        .eq('restaurant_id', restaurantId)
+        .select('id')
+        .returns<Array<Pick<Product, 'id'>>>()
+        .single();
+      if (error) throw error;
+      updateProductList(restaurantId, (products) => products.filter((item) => item.id !== data.id));
+      setProductMessage({ type: 'success', text: 'Produto excluído.' });
+    } catch (error) {
+      setProductMessage({
+        type: 'error',
+        text: `Não foi possível excluir o produto: ${getErrorMessage(error)}`,
+      });
+    } finally {
+      setProductOperation(null);
+    }
+  };
+
+  const handleProductAvailability = async (product: Product) => {
+    if (!supabase || membership.status !== 'ready') return;
+
+    const restaurantId = membership.data.restaurant.id;
+    const isAvailable = !product.is_available;
+    setProductOperation(`toggle:${product.id}`);
+    setProductMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .update({ is_available: isAvailable })
+        .eq('id', product.id)
+        .eq('restaurant_id', restaurantId)
+        .select('id, is_available')
+        .returns<Array<Pick<Product, 'id' | 'is_available'>>>()
+        .single();
+      if (error) throw error;
+      updateProductList(restaurantId, (products) => products.map((item) => item.id === data.id
+        ? { ...item, is_available: data.is_available }
+        : item));
+      setProductMessage({
+        type: 'success',
+        text: data.is_available ? 'Produto marcado como disponível.' : 'Produto marcado como indisponível.',
+      });
+    } catch (error) {
+      setProductMessage({
+        type: 'error',
+        text: `Não foi possível alterar a disponibilidade: ${getErrorMessage(error)}`,
+      });
+    } finally {
+      setProductOperation(null);
     }
   };
 
@@ -582,7 +799,127 @@ function AdminApp({ pathname }: { pathname: string }) {
         </section>
 
         <section className="admin-section" aria-labelledby="admin-products-title">
-          <h2 id="admin-products-title">Produtos</h2>
+          <div className="admin-section-heading">
+            <h2 id="admin-products-title">Produtos</h2>
+            <button
+              className="admin-secondary-button"
+              type="button"
+              disabled={productOperation !== null}
+              onClick={() => {
+                if (showProductForm) {
+                  resetProductForm();
+                } else {
+                  resetProductForm();
+                  setShowProductForm(true);
+                }
+                setProductMessage(null);
+              }}
+            >
+              {showProductForm ? 'Cancelar' : 'Novo produto'}
+            </button>
+          </div>
+          {productMessage && (
+            <p className={`admin-feedback is-${productMessage.type}`} role={productMessage.type === 'error' ? 'alert' : 'status'}>
+              {productMessage.text}
+            </p>
+          )}
+          {showProductForm && (
+            <form className="admin-form admin-product-form" onSubmit={(event) => void handleProductSubmit(event)}>
+              <label htmlFor="admin-product-name">Nome</label>
+              <input
+                id="admin-product-name"
+                type="text"
+                required
+                value={productName}
+                onChange={(event) => setProductName(event.target.value)}
+                disabled={productOperation !== null}
+              />
+              <label htmlFor="admin-product-description">Descrição</label>
+              <textarea
+                id="admin-product-description"
+                value={productDescription}
+                onChange={(event) => setProductDescription(event.target.value)}
+                disabled={productOperation !== null}
+              />
+              <label htmlFor="admin-product-detail">Detalhe</label>
+              <textarea
+                id="admin-product-detail"
+                value={productDetail}
+                onChange={(event) => setProductDetail(event.target.value)}
+                disabled={productOperation !== null}
+              />
+              <label htmlFor="admin-product-price">Preço</label>
+              <input
+                id="admin-product-price"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                value={productPrice}
+                onChange={(event) => setProductPrice(event.target.value)}
+                disabled={productOperation !== null}
+              />
+              <label htmlFor="admin-product-category">Categoria</label>
+              <select
+                id="admin-product-category"
+                value={productCategoryId}
+                onChange={(event) => setProductCategoryId(event.target.value)}
+                disabled={productOperation !== null}
+              >
+                <option value="">Sem categoria</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+              <label htmlFor="admin-product-image-url">URL da imagem (opcional)</label>
+              <input
+                id="admin-product-image-url"
+                type="url"
+                value={productImageUrl}
+                onChange={(event) => setProductImageUrl(event.target.value)}
+                disabled={productOperation !== null}
+              />
+              <label htmlFor="admin-product-image-alt">Texto alternativo da imagem</label>
+              <input
+                id="admin-product-image-alt"
+                type="text"
+                value={productImageAlt}
+                onChange={(event) => setProductImageAlt(event.target.value)}
+                disabled={productOperation !== null}
+              />
+              <label className="admin-checkbox-label" htmlFor="admin-product-available">
+                <input
+                  id="admin-product-available"
+                  type="checkbox"
+                  checked={productIsAvailable}
+                  onChange={(event) => setProductIsAvailable(event.target.checked)}
+                  disabled={productOperation !== null}
+                />
+                Disponível
+              </label>
+              <label htmlFor="admin-product-order">Ordem</label>
+              <input
+                id="admin-product-order"
+                type="number"
+                min="0"
+                step="1"
+                required
+                value={productOrder}
+                onChange={(event) => setProductOrder(event.target.value)}
+                disabled={productOperation !== null}
+              />
+              <div className="admin-category-form-actions">
+                <button className="admin-primary-button" type="submit" disabled={productOperation !== null}>
+                  {productOperation === 'create' || productOperation?.startsWith('update:')
+                    ? 'Salvando…'
+                    : editingProductId ? 'Salvar alterações' : 'Criar produto'}
+                </button>
+                <button className="admin-secondary-button" type="button" onClick={resetProductForm} disabled={productOperation !== null}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
           {products.length ? (
             <ul className="admin-list">
               {products.map((product) => (
@@ -595,6 +932,34 @@ function AdminApp({ pathname }: { pathname: string }) {
                   <span className="admin-product-meta">
                     <strong>{product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
                     <span>{product.is_available ? 'Disponível' : 'Indisponível'} · Ordem {product.sort_order}</span>
+                    <span className="admin-category-actions">
+                      <button
+                        className="admin-category-action"
+                        type="button"
+                        disabled={productOperation !== null || showProductForm}
+                        onClick={() => void handleProductAvailability(product)}
+                      >
+                        {productOperation === `toggle:${product.id}`
+                          ? 'Atualizando…'
+                          : product.is_available ? 'Marcar indisponível' : 'Marcar disponível'}
+                      </button>
+                      <button
+                        className="admin-category-action"
+                        type="button"
+                        disabled={productOperation !== null || showProductForm}
+                        onClick={() => beginProductEdit(product)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="admin-category-action is-danger"
+                        type="button"
+                        disabled={productOperation !== null || showProductForm}
+                        onClick={() => void handleProductDelete(product)}
+                      >
+                        {productOperation === `delete:${product.id}` ? 'Excluindo…' : 'Excluir'}
+                      </button>
+                    </span>
                   </span>
                 </li>
               ))}
