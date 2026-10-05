@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabase';
 import './admin.css';
 
@@ -10,6 +11,7 @@ type AdminAssociation = {
 
 type Restaurant = {
   id: string;
+  slug: string;
   name: string;
   description: string | null;
   logo_url: string | null;
@@ -18,7 +20,7 @@ type Restaurant = {
   is_public: boolean;
 };
 
-type RestaurantSettings = Omit<Restaurant, 'id'>;
+type RestaurantSettings = Omit<Restaurant, 'id' | 'slug'>;
 
 type Category = {
   id: string;
@@ -56,7 +58,11 @@ type MembershipState =
   | { status: 'ready'; data: DashboardData };
 
 function navigate(pathname: string) {
-  window.history.pushState({}, '', pathname);
+  const baseUrl = import.meta.env.BASE_URL;
+  const targetPath = pathname === '/'
+    ? baseUrl
+    : `${baseUrl}${pathname.replace(/^\/+/, '')}`;
+  window.history.pushState({}, '', targetPath);
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
@@ -102,6 +108,7 @@ function AdminApp({ pathname }: { pathname: string }) {
   });
   const [restaurantSettingsSaving, setRestaurantSettingsSaving] = useState(false);
   const [restaurantSettingsMessage, setRestaurantSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [shareMessage, setShareMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const authEventVersion = useRef(0);
   const isDashboardPath = pathname === '/admin/dashboard';
 
@@ -174,7 +181,7 @@ function AdminApp({ pathname }: { pathname: string }) {
         const [restaurantResult, categoriesResult, productsResult] = await Promise.all([
           supabase
             .from('restaurants')
-            .select('id, name, description, logo_url, telefone, whatsapp, is_public')
+            .select('id, slug, name, description, logo_url, telefone, whatsapp, is_public')
             .returns<Restaurant[]>()
             .eq('id', restaurantId)
             .maybeSingle(),
@@ -652,7 +659,7 @@ function AdminApp({ pathname }: { pathname: string }) {
         .from('restaurants')
         .update(values)
         .eq('id', restaurantId)
-        .select('id, name, description, logo_url, telefone, whatsapp, is_public')
+        .select('id, slug, name, description, logo_url, telefone, whatsapp, is_public')
         .returns<Restaurant[]>()
         .single();
       if (error) throw error;
@@ -691,7 +698,7 @@ function AdminApp({ pathname }: { pathname: string }) {
           <p className="admin-eyebrow">Área restrita</p>
           <h1 id="admin-title">Painel administrativo</h1>
           <p className="admin-message">O Supabase não está configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY para habilitar o acesso.</p>
-          <a className="admin-secondary-link" href="/">Voltar ao cardápio</a>
+          <a className="admin-secondary-link" href={import.meta.env.BASE_URL}>Voltar ao cardápio</a>
         </section>
       </main>
     );
@@ -727,7 +734,7 @@ function AdminApp({ pathname }: { pathname: string }) {
               {signingIn ? 'Entrando…' : 'Entrar'}
             </button>
           </form>
-          <a className="admin-secondary-link" href="/">Voltar ao cardápio</a>
+          <a className="admin-secondary-link" href={import.meta.env.BASE_URL}>Voltar ao cardápio</a>
         </section>
       </main>
     );
@@ -765,6 +772,45 @@ function AdminApp({ pathname }: { pathname: string }) {
 
   const { restaurant, categories, products } = membership.data;
   const categoryNames = new Map(categories.map((category) => [category.id, category.name]));
+  const publicMenuUrl = restaurant.slug
+    ? (() => {
+      const url = new URL(import.meta.env.BASE_URL, window.location.origin);
+      url.searchParams.set('restaurante', restaurant.slug);
+      return url.toString();
+    })()
+    : '';
+
+  const handleCopyMenuLink = async () => {
+    if (!publicMenuUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicMenuUrl);
+      setShareMessage({ type: 'success', text: 'Link copiado para a área de transferência.' });
+    } catch (error) {
+      setShareMessage({
+        type: 'error',
+        text: `Não foi possível copiar o link: ${getErrorMessage(error)}`,
+      });
+    }
+  };
+
+  const handleDownloadQrCode = () => {
+    const svg = document.querySelector<SVGSVGElement>('#admin-restaurant-qr svg');
+    if (!svg) {
+      setShareMessage({ type: 'error', text: 'Não foi possível preparar o QR Code para download.' });
+      return;
+    }
+
+    const image = new Blob([new XMLSerializer().serializeToString(svg)], {
+      type: 'image/svg+xml;charset=utf-8',
+    });
+    const downloadUrl = URL.createObjectURL(image);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'cardapio.svg';
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+    setShareMessage({ type: 'success', text: 'QR Code baixado como imagem SVG.' });
+  };
 
   return (
     <main className="admin-page">
@@ -850,6 +896,31 @@ function AdminApp({ pathname }: { pathname: string }) {
               {restaurantSettingsSaving ? 'Salvando…' : 'Salvar configurações'}
             </button>
           </form>
+        </section>
+
+        <section className="admin-section" aria-labelledby="admin-share-menu-title">
+          <h2 id="admin-share-menu-title">Compartilhar cardápio</h2>
+          {shareMessage && (
+            <p className={`admin-feedback is-${shareMessage.type}`} role={shareMessage.type === 'error' ? 'alert' : 'status'}>
+              {shareMessage.text}
+            </p>
+          )}
+          {publicMenuUrl ? (
+            <div className="admin-share-menu">
+              <p className="admin-share-link">{publicMenuUrl}</p>
+              <button className="admin-secondary-button" type="button" onClick={() => void handleCopyMenuLink()}>
+                Copiar link
+              </button>
+              <div id="admin-restaurant-qr" className="admin-qr-code">
+                <QRCodeSVG value={publicMenuUrl} size={220} level="M" includeMargin />
+              </div>
+              <button className="admin-secondary-button" type="button" onClick={handleDownloadQrCode}>
+                Baixar QR Code
+              </button>
+            </div>
+          ) : (
+            <p className="admin-message">Não foi possível obter o slug deste restaurante para gerar o link público.</p>
+          )}
         </section>
 
         <section className="admin-section" aria-labelledby="admin-categories-title">
