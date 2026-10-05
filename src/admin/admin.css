@@ -50,7 +50,9 @@
   font-weight: 600;
 }
 
-.admin-form input {
+.admin-form input:not([type='checkbox']),
+.admin-form select,
+.admin-form textarea {
   width: 100%;
   min-height: 46px;
   padding: 10px 12px;
@@ -61,7 +63,14 @@
   font: inherit;
 }
 
-.admin-form input:focus {
+.admin-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.admin-form input:focus,
+.admin-form select:focus,
+.admin-form textarea:focus {
   outline: 2px solid #8aa58e;
   outline-offset: 2px;
 }
@@ -163,12 +172,26 @@
   margin: 0;
 }
 
-.admin-category-form {
+.admin-category-form,
+.admin-product-form {
   margin: 0 0 16px;
   padding: 18px;
   border: 1px solid rgba(49, 87, 67, .12);
   border-radius: 12px;
   background: #fffdf8;
+}
+
+.admin-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.admin-checkbox-label input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #315743;
 }
 
 .admin-category-form-actions,
