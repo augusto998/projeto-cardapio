@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUpRight, Clock3, MapPin, MessageCircle, Phone, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpRight, Clock3, MapPin, MessageCircle, Phone, X } from 'lucide-react';
 import paoDeQueijo from './assets/pao-de-queijo.jpg';
 import bolinhoDeMandioca from './assets/bolinho-de-mandioca.jpg';
 import frangoQuiabo from './assets/frango-quiabo.jpg';
@@ -101,6 +101,7 @@ function PitangaMark() {
 function App() {
   const [activeCategory, setActiveCategory] = useState('Tudo');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
   const visibleCategories = categories.slice(1);
@@ -134,13 +135,56 @@ function App() {
     };
   }, [selectedItem]);
 
+  useEffect(() => {
+    const categoryBySectionId = new Map<string, string>(
+      visibleCategories.map((category) => [
+        `categoria-${categorySlug(category)}`,
+        category,
+      ] as const),
+    );
+    const sections = [...categoryBySectionId.keys()]
+      .map((id) => document.getElementById(id))
+      .filter((section): section is HTMLElement => section instanceof HTMLElement);
+
+    if (!('IntersectionObserver' in window)) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const currentSection = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      const category = currentSection
+        ? categoryBySectionId.get(currentSection.target.id)
+        : undefined;
+      if (category) setActiveCategory(category);
+    }, { rootMargin: '-130px 0px -55% 0px', threshold: 0 });
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const updateScrollState = () => {
+      const isPastIntro = window.scrollY > 480;
+      setShowBackToTop((current) => current === isPastIntro ? current : isPastIntro);
+      if (!isPastIntro) {
+        setActiveCategory((current) => current === 'Tudo' ? current : 'Tudo');
+      }
+    };
+
+    updateScrollState();
+    window.addEventListener('scroll', updateScrollState, { passive: true });
+    return () => window.removeEventListener('scroll', updateScrollState);
+  }, []);
+
   const goToCategory = (category: string) => {
     setActiveCategory(category);
-    if (category === 'Tudo') {
-      document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' });
-      return;
-    }
-    document.getElementById(`categoria-${categorySlug(category)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const targetId = category === 'Tudo'
+      ? 'menu'
+      : `categoria-${categorySlug(category)}`;
+    document.getElementById(targetId)?.scrollIntoView({
+      behavior: preferredScrollBehavior(),
+      block: 'start',
+    });
   };
 
   return (
@@ -249,7 +293,7 @@ function App() {
             <a className="contact-link" href="tel:+5500000000000" data-testid="link-telefone">
               <Phone size={17} aria-hidden="true" /><span><small>Ligue para nós</small><strong>+55 (00) 00000-0000</strong></span>
             </a>
-            <a className="contact-link" href={`${whatsappBase}?text=${encodeURIComponent('Oi! Quero saber mais sobre o cardápio do Bistrô Pitanga.')}`} target="_blank" rel="noreferrer" data-testid="link-whatsapp-contato">
+            <a className="contact-link" href={`${whatsappBase}?text=${encodeURIComponent('Oi! Quero saber mais sobre o cardápio do Bistrô Pitanga.')}`} target="_blank" rel="noopener noreferrer" data-testid="link-whatsapp-contato">
               <MessageCircle size={17} aria-hidden="true" /><span><small>WhatsApp</small><strong>+55 (00) 00000-0000</strong></span>
             </a>
           </div>
@@ -281,7 +325,7 @@ function App() {
                 className="whatsapp-cta"
                 href={`${whatsappBase}?text=${encodeURIComponent(`Oi! Tenho interesse no ${selectedItem.name} do Bistrô Pitanga.`)}`}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 data-testid={`link-whatsapp-produto-${selectedItem.id}`}
               >
                 <MessageCircle size={17} aria-hidden="true" /> Perguntar pelo WhatsApp
@@ -291,8 +335,24 @@ function App() {
           </section>
         </div>
       )}
+
+      {showBackToTop && (
+        <button
+          className="back-to-top"
+          type="button"
+          aria-label="Voltar ao topo"
+          data-testid="button-voltar-ao-topo"
+          onClick={() => window.scrollTo({ top: 0, behavior: preferredScrollBehavior() })}
+        >
+          <ArrowUp size={18} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
+}
+
+function preferredScrollBehavior(): ScrollBehavior {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
 function categorySlug(category: string) {

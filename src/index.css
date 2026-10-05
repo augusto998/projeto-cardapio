@@ -607,6 +607,14 @@
 .dialog-price { color:#315743; font-weight:700; font-size:19px; }
 .whatsapp-cta { width:100%; min-height:48px; display:flex; align-items:center; justify-content:center; gap:9px; border-radius:13px; background:#315743; color:#fff8ec; font-size:13px; font-weight:700; text-decoration:none; transition:background .18s ease, transform .18s ease; }
 .whatsapp-cta:hover { background:#254735; transform:translateY(-1px); }
+.back-to-top {
+  position:fixed; z-index:35; right:max(16px,calc((100vw - 1160px)/2)); bottom:max(16px,env(safe-area-inset-bottom));
+  display:grid; place-items:center; width:44px; height:44px; border:1px solid rgba(255,249,234,.24);
+  border-radius:50%; color:#fbf4e9; background:#315743; box-shadow:0 6px 18px rgba(26,39,32,.2);
+  cursor:pointer; transition:background .18s ease, transform .18s ease;
+}
+.back-to-top:hover { background:#254735; transform:translateY(-2px); }
+.back-to-top:active { transform:scale(.96); }
 .demo-caption { margin:11px 0 0; color:#90968d; font-size:10px; text-align:center; }
 @keyframes fade-in { from {opacity:0} to {opacity:1} }
 @keyframes rise-in { from {opacity:0;transform:translateY(18px)} to {opacity:1;transform:translateY(0)} }
