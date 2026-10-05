@@ -11,8 +11,14 @@ type AdminAssociation = {
 type Restaurant = {
   id: string;
   name: string;
+  description: string | null;
+  logo_url: string | null;
+  telefone: string | null;
+  whatsapp: string | null;
   is_public: boolean;
 };
+
+type RestaurantSettings = Omit<Restaurant, 'id'>;
 
 type Category = {
   id: string;
@@ -86,6 +92,16 @@ function AdminApp({ pathname }: { pathname: string }) {
   const [showProductForm, setShowProductForm] = useState(false);
   const [productOperation, setProductOperation] = useState<ProductOperation>(null);
   const [productMessage, setProductMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [restaurantSettings, setRestaurantSettings] = useState<RestaurantSettings>({
+    name: '',
+    description: null,
+    logo_url: null,
+    telefone: null,
+    whatsapp: null,
+    is_public: false,
+  });
+  const [restaurantSettingsSaving, setRestaurantSettingsSaving] = useState(false);
+  const [restaurantSettingsMessage, setRestaurantSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const authEventVersion = useRef(0);
   const isDashboardPath = pathname === '/admin/dashboard';
 
@@ -158,7 +174,7 @@ function AdminApp({ pathname }: { pathname: string }) {
         const [restaurantResult, categoriesResult, productsResult] = await Promise.all([
           supabase
             .from('restaurants')
-            .select('id, name, is_public')
+            .select('id, name, description, logo_url, telefone, whatsapp, is_public')
             .returns<Restaurant[]>()
             .eq('id', restaurantId)
             .maybeSingle(),
@@ -190,13 +206,22 @@ function AdminApp({ pathname }: { pathname: string }) {
         }
 
         if (isCurrent) {
+          const restaurant = restaurantResult.data;
           setMembership({
             status: 'ready',
             data: {
-              restaurant: restaurantResult.data,
+              restaurant,
               categories: categoriesResult.data ?? [],
               products: productsResult.data ?? [],
             },
+          });
+          setRestaurantSettings({
+            name: restaurant.name,
+            description: restaurant.description,
+            logo_url: restaurant.logo_url,
+            telefone: restaurant.telefone,
+            whatsapp: restaurant.whatsapp,
+            is_public: restaurant.is_public,
           });
         }
       } catch (error) {
@@ -600,6 +625,61 @@ function AdminApp({ pathname }: { pathname: string }) {
     }
   };
 
+  const handleRestaurantSettingsSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase || membership.status !== 'ready') return;
+
+    const name = restaurantSettings.name.trim();
+    if (!name) {
+      setRestaurantSettingsMessage({ type: 'error', text: 'Informe o nome do restaurante.' });
+      return;
+    }
+
+    const restaurantId = membership.data.restaurant.id;
+    const values: RestaurantSettings = {
+      name,
+      description: restaurantSettings.description?.trim() || null,
+      logo_url: restaurantSettings.logo_url?.trim() || null,
+      telefone: restaurantSettings.telefone?.trim() || null,
+      whatsapp: restaurantSettings.whatsapp?.trim() || null,
+      is_public: restaurantSettings.is_public,
+    };
+    setRestaurantSettingsSaving(true);
+    setRestaurantSettingsMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('restaurants')
+        .update(values)
+        .eq('id', restaurantId)
+        .select('id, name, description, logo_url, telefone, whatsapp, is_public')
+        .returns<Restaurant[]>()
+        .single();
+      if (error) throw error;
+
+      setMembership((current) => {
+        if (current.status !== 'ready' || current.data.restaurant.id !== restaurantId) return current;
+        return { ...current, data: { ...current.data, restaurant: data } };
+      });
+      setRestaurantSettings({
+        name: data.name,
+        description: data.description,
+        logo_url: data.logo_url,
+        telefone: data.telefone,
+        whatsapp: data.whatsapp,
+        is_public: data.is_public,
+      });
+      setRestaurantSettingsMessage({ type: 'success', text: 'Configurações do restaurante atualizadas.' });
+    } catch (error) {
+      setRestaurantSettingsMessage({
+        type: 'error',
+        text: `Não foi possível salvar as configurações: ${getErrorMessage(error)}`,
+      });
+    } finally {
+      setRestaurantSettingsSaving(false);
+    }
+  };
+
   if (authLoading || (session && membership.status === 'idle')) {
     return <main className="admin-page"><p className="admin-message">Verificando sessão…</p></main>;
   }
@@ -703,6 +783,74 @@ function AdminApp({ pathname }: { pathname: string }) {
         </header>
 
         {authError && <p className="admin-error" role="alert">{authError}</p>}
+
+        <section className="admin-section" aria-labelledby="admin-restaurant-settings-title">
+          <h2 id="admin-restaurant-settings-title">Configurações do restaurante</h2>
+          {restaurantSettingsMessage && (
+            <p
+              className={`admin-feedback is-${restaurantSettingsMessage.type}`}
+              role={restaurantSettingsMessage.type === 'error' ? 'alert' : 'status'}
+            >
+              {restaurantSettingsMessage.text}
+            </p>
+          )}
+          <form className="admin-form admin-restaurant-settings-form" onSubmit={(event) => void handleRestaurantSettingsSubmit(event)}>
+            <label htmlFor="admin-restaurant-name">Nome</label>
+            <input
+              id="admin-restaurant-name"
+              type="text"
+              required
+              maxLength={160}
+              value={restaurantSettings.name}
+              onChange={(event) => setRestaurantSettings((current) => ({ ...current, name: event.target.value }))}
+              disabled={restaurantSettingsSaving}
+            />
+            <label htmlFor="admin-restaurant-description">Descrição</label>
+            <textarea
+              id="admin-restaurant-description"
+              value={restaurantSettings.description ?? ''}
+              onChange={(event) => setRestaurantSettings((current) => ({ ...current, description: event.target.value }))}
+              disabled={restaurantSettingsSaving}
+            />
+            <label htmlFor="admin-restaurant-logo">URL do logo (opcional)</label>
+            <input
+              id="admin-restaurant-logo"
+              type="url"
+              value={restaurantSettings.logo_url ?? ''}
+              onChange={(event) => setRestaurantSettings((current) => ({ ...current, logo_url: event.target.value }))}
+              disabled={restaurantSettingsSaving}
+            />
+            <label htmlFor="admin-restaurant-phone">Telefone</label>
+            <input
+              id="admin-restaurant-phone"
+              type="tel"
+              value={restaurantSettings.telefone ?? ''}
+              onChange={(event) => setRestaurantSettings((current) => ({ ...current, telefone: event.target.value }))}
+              disabled={restaurantSettingsSaving}
+            />
+            <label htmlFor="admin-restaurant-whatsapp">WhatsApp</label>
+            <input
+              id="admin-restaurant-whatsapp"
+              type="tel"
+              value={restaurantSettings.whatsapp ?? ''}
+              onChange={(event) => setRestaurantSettings((current) => ({ ...current, whatsapp: event.target.value }))}
+              disabled={restaurantSettingsSaving}
+            />
+            <label className="admin-checkbox-label" htmlFor="admin-restaurant-public">
+              <input
+                id="admin-restaurant-public"
+                type="checkbox"
+                checked={restaurantSettings.is_public}
+                onChange={(event) => setRestaurantSettings((current) => ({ ...current, is_public: event.target.checked }))}
+                disabled={restaurantSettingsSaving}
+              />
+              Cardápio público
+            </label>
+            <button className="admin-primary-button" type="submit" disabled={restaurantSettingsSaving}>
+              {restaurantSettingsSaving ? 'Salvando…' : 'Salvar configurações'}
+            </button>
+          </form>
+        </section>
 
         <section className="admin-section" aria-labelledby="admin-categories-title">
           <div className="admin-section-heading">

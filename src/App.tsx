@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpRight, Clock3, MapPin, MessageCircle, Phone,
 import AdminApp from './admin/AdminApp';
 import { menuData } from './data/menu';
 import { loadPublicMenuData } from './data/menuRepository';
-import type { MenuItem } from './types/menu';
+import type { MenuItem, PublicMenuData } from './types/menu';
 
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -36,13 +36,13 @@ function PitangaMark() {
 }
 
 function PublicMenuApp() {
-  const [menu, setMenu] = useState(menuData);
+  const [menu, setMenu] = useState<PublicMenuData | null | undefined>(undefined);
   const [activeCategory, setActiveCategory] = useState('Tudo');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const { restaurant, contacts, categories: menuCategories, items } = menu;
+  const { restaurant, contacts, categories: menuCategories, items } = menu ?? menuData;
   const categories = ['Tudo', ...menuCategories.map((category) => category.name)];
   const whatsappBase = `https://wa.me/${contacts.whatsapp.number}`;
   const visibleCategories = menuCategories;
@@ -130,6 +130,18 @@ function PublicMenuApp() {
     return () => window.removeEventListener('scroll', updateScrollState);
   }, []);
 
+  if (menu === undefined) {
+    return <main className="menu-availability-state" role="status">Carregando cardápio…</main>;
+  }
+
+  if (menu === null) {
+    return (
+      <main className="menu-availability-state" role="status">
+        Este cardápio está indisponível no momento.
+      </main>
+    );
+  }
+
   const goToCategory = (category: string) => {
     setActiveCategory(category);
     const targetId = category === 'Tudo'
@@ -146,7 +158,11 @@ function PublicMenuApp() {
       <header className="topbar">
         <div className="topbar-inner">
           <a className="brand" href="#inicio" aria-label={`${restaurant.name}, início`} data-testid="link-home">
-            <span className="brand-mark"><PitangaMark /></span>
+            <span className="brand-mark">
+              {restaurant.logoUrl
+                ? <img src={restaurant.logoUrl} alt="" />
+                : <PitangaMark />}
+            </span>
             <span><span className="brand-name">{restaurant.name}</span><span className="brand-kicker">{restaurant.brandTagline}</span></span>
           </a>
           <a className="top-link" href="#cardapio" data-testid="link-cardapio-topo">Ver cardápio <ArrowUpRight size={14} aria-hidden="true" /></a>

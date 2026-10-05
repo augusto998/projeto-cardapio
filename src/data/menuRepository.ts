@@ -6,6 +6,7 @@ type RestaurantRow = {
   id: string;
   name: string;
   description: string | null;
+  logo_url: string | null;
   telefone: string | null;
   whatsapp: string | null;
 };
@@ -32,20 +33,21 @@ type ProductRow = {
 const restaurantSlug = import.meta.env.VITE_SUPABASE_RESTAURANT_SLUG?.trim();
 const digitsOnly = (value: string) => value.replace(/\D/g, '');
 
-export async function loadPublicMenuData(): Promise<PublicMenuData> {
-  if (!supabase || !restaurantSlug) return menuData;
+export async function loadPublicMenuData(): Promise<PublicMenuData | null> {
+  if (!supabase) return menuData;
+  if (!restaurantSlug) return null;
 
   try {
     const { data: restaurant, error: restaurantError } = await supabase
       .from('restaurants')
-      .select('id, name, description, telefone, whatsapp')
+      .select('id, name, description, logo_url, telefone, whatsapp')
       .returns<RestaurantRow[]>()
       .eq('slug', restaurantSlug)
       .eq('is_public', true)
       .maybeSingle();
 
     if (restaurantError) throw restaurantError;
-    if (!restaurant) return menuData;
+    if (!restaurant) return null;
 
     const [categoriesResult, productsResult] = await Promise.all([
       supabase
@@ -97,6 +99,7 @@ export async function loadPublicMenuData(): Promise<PublicMenuData> {
       restaurant: {
         ...restaurantCopy,
         name: restaurant.name,
+        logoUrl: restaurant.logo_url ?? undefined,
         brandTagline: 'Cardápio do restaurante',
         heroEyebrow: 'Confira o cardápio',
         heroDescription: restaurant.description ?? 'Conheça os produtos disponíveis neste restaurante.',
@@ -132,7 +135,7 @@ export async function loadPublicMenuData(): Promise<PublicMenuData> {
       items,
     };
   } catch (error) {
-    console.error('Não foi possível carregar o cardápio do Supabase; usando os dados de demonstração.', error);
-    return menuData;
+    console.error('Não foi possível carregar o cardápio público do Supabase.', error);
+    return null;
   }
 }

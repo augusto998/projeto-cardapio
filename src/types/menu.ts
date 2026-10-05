@@ -19,6 +19,7 @@ export type MenuItem = {
 
 export type RestaurantInfo = {
   name: string;
+  logoUrl?: string;
   brandTagline: string;
   heroEyebrow: string;
   heroTitle: string;
