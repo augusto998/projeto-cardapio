@@ -1,89 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Clock3, MapPin, MessageCircle, Phone, X } from 'lucide-react';
-import paoDeQueijo from './assets/pao-de-queijo.jpg';
-import bolinhoDeMandioca from './assets/bolinho-de-mandioca.jpg';
-import frangoQuiabo from './assets/frango-quiabo.jpg';
-import carnePanela from './assets/carne-panela.jpg';
-import boloFuba from './assets/bolo-fuba.jpg';
-import brigadeiro from './assets/brigadeiro.jpg';
+import { menuData } from './data/menu';
+import type { MenuItem } from './types/menu';
 
-type MenuItem = {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  detail: string;
-  price: number;
-  image: string;
-  imageAlt: string;
-};
-
-const items: MenuItem[] = [
-  {
-    id: 'pao-de-queijo',
-    name: 'Pão de queijo da casa',
-    category: 'Pra começar',
-    description: 'Casquinha dourada, miolo macio e queijo meia-cura.',
-    detail: 'Feito aqui todos os dias, com polvilho artesanal e queijo meia-cura de pequenos produtores. Vai quentinho para a mesa, do jeito que tem que ser.',
-    price: 18,
-    image: paoDeQueijo,
-    imageAlt: 'Pães de queijo dourados servidos em prato de cerâmica',
-  },
-  {
-    id: 'bolinho-mandioca',
-    name: 'Bolinho de mandioca',
-    category: 'Pra começar',
-    description: 'Mandioca cremosa, recheio da estação e pimenta da casa.',
-    detail: 'Mandioca cozida lentamente, temperos frescos e um recheio surpresa que muda com a feira. Crocante por fora, bem macio por dentro.',
-    price: 24,
-    image: bolinhoDeMandioca,
-    imageAlt: 'Bolinho de mandioca crocante com molho de pimenta',
-  },
-  {
-    id: 'frango-quiabo',
-    name: 'Frango com quiabo',
-    category: 'Da nossa cozinha',
-    description: 'Frango caipira, quiabo fresco e polenta cremosa.',
-    detail: 'Frango caipira dourado na panela, quiabo fresco sem pressa e polenta cremosa de milho amarelo. Um prato que pede mesa compartilhada.',
-    price: 42,
-    image: frangoQuiabo,
-    imageAlt: 'Frango ensopado com quiabo e polenta cremosa',
-  },
-  {
-    id: 'carne-panela',
-    name: 'Carne de panela',
-    category: 'Da nossa cozinha',
-    description: 'Cozida por horas, com purê de mandioca e ervas.',
-    detail: 'Acém de criação local, cebolas macias e molho encorpado de panela. Acompanha purê de mandioca feito na hora e ervas da horta.',
-    price: 48,
-    image: carnePanela,
-    imageAlt: 'Carne de panela com purê de mandioca e ervas frescas',
-  },
-  {
-    id: 'bolo-fuba',
-    name: 'Bolo de fubá com goiabada',
-    category: 'Pra adoçar',
-    description: 'Fatia generosa, bolo fofinho e goiabada cascão.',
-    detail: 'Nosso bolo de fubá tem casquinha dourada, interior leve e uma faixa generosa de goiabada cascão. Bom com café, melhor ainda sem pressa.',
-    price: 16,
-    image: boloFuba,
-    imageAlt: 'Fatia de bolo de fubá caseiro com goiabada',
-  },
-  {
-    id: 'brigadeiro',
-    name: 'Brigadeiro de colher',
-    category: 'Pra adoçar',
-    description: 'Chocolate intenso, feito devagar e finalizado à mão.',
-    detail: 'Chocolate brasileiro, leite condensado e uma pitada de sal. Mexido no fogo baixo até ficar brilhante e servido com granulado de verdade.',
-    price: 14,
-    image: brigadeiro,
-    imageAlt: 'Brigadeiros artesanais com granulado de chocolate',
-  },
-];
-
-const categories = ['Tudo', 'Pra começar', 'Da nossa cozinha', 'Pra adoçar'];
-const whatsappNumber = '5500000000000';
-const whatsappBase = `https://wa.me/${whatsappNumber}`;
+const { restaurant, contacts, categories: menuCategories, items } = menuData;
+const categories = ['Tudo', ...menuCategories.map((category) => category.name)];
+const whatsappBase = `https://wa.me/${contacts.whatsapp.number}`;
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function PitangaMark() {
@@ -104,7 +26,10 @@ function App() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const visibleCategories = categories.slice(1);
+  const visibleCategories = menuCategories;
+  const selectedCategory = selectedItem
+    ? menuCategories.find((category) => category.id === selectedItem.categoryId)
+    : undefined;
 
   useEffect(() => {
     if (!selectedItem) return;
@@ -138,8 +63,8 @@ function App() {
   useEffect(() => {
     const categoryBySectionId = new Map<string, string>(
       visibleCategories.map((category) => [
-        `categoria-${categorySlug(category)}`,
-        category,
+        `categoria-${categorySlug(category.name)}`,
+        category.name,
       ] as const),
     );
     const sections = [...categoryBySectionId.keys()]
@@ -191,9 +116,9 @@ function App() {
     <div className="page-shell">
       <header className="topbar">
         <div className="topbar-inner">
-          <a className="brand" href="#inicio" aria-label="Bistrô Pitanga, início" data-testid="link-home">
+          <a className="brand" href="#inicio" aria-label={`${restaurant.name}, início`} data-testid="link-home">
             <span className="brand-mark"><PitangaMark /></span>
-            <span><span className="brand-name">Bistrô Pitanga</span><span className="brand-kicker">comida de casa, feita aqui</span></span>
+            <span><span className="brand-name">{restaurant.name}</span><span className="brand-kicker">{restaurant.brandTagline}</span></span>
           </a>
           <a className="top-link" href="#cardapio" data-testid="link-cardapio-topo">Ver cardápio <ArrowUpRight size={14} aria-hidden="true" /></a>
         </div>
@@ -203,25 +128,25 @@ function App() {
         <section className="hero-wrap" aria-labelledby="hero-title" data-testid="section-apresentacao">
           <div className="hero">
             <div className="hero-copy">
-              <span className="eyebrow">Cozinha de afeto, todo dia</span>
-              <h1 id="hero-title">Um lugar gostoso de chamar de seu.</h1>
-              <p>Receitas brasileiras, ingredientes fresquinhos e aquele cuidado que dá para sentir em cada garfada.</p>
+              <span className="eyebrow">{restaurant.heroEyebrow}</span>
+              <h1 id="hero-title">{restaurant.heroTitle}</h1>
+              <p>{restaurant.heroDescription}</p>
               <div className="quick-facts" aria-label="Informações do restaurante">
-                <span><Clock3 size={14} aria-hidden="true" /> Ter a dom · 11h30 às 22h</span>
-                <span><MapPin size={14} aria-hidden="true" /> Vila Madalena, SP</span>
+                <span><Clock3 size={14} aria-hidden="true" /> {restaurant.openingHours}</span>
+                <span><MapPin size={14} aria-hidden="true" /> {restaurant.location}</span>
               </div>
             </div>
-            <div className="hero-note" aria-label="Feito com carinho"><strong>de verdade</strong>feito com carinho</div>
+            <div className="hero-note" aria-label="Feito com carinho"><strong>{restaurant.heroNoteTitle}</strong>{restaurant.heroNoteDescription}</div>
           </div>
         </section>
 
         <section id="cardapio" className="menu-wrap" aria-labelledby="menu-title" data-testid="section-cardapio">
           <div id="menu" className="menu-heading">
             <div>
-              <h2 id="menu-title" className="serif">À mesa</h2>
-              <p>Um pedacinho da nossa cozinha para você.</p>
+              <h2 id="menu-title" className="serif">{restaurant.menuTitle}</h2>
+              <p>{restaurant.menuDescription}</p>
             </div>
-            <span className="eyebrow" style={{ color: '#728173' }}>feito na casa</span>
+            <span className="eyebrow" style={{ color: '#728173' }}>{restaurant.menuBadge}</span>
           </div>
 
           <nav className="category-bar" aria-label="Categorias do cardápio" data-testid="nav-categorias">
@@ -240,11 +165,11 @@ function App() {
           </nav>
 
           {visibleCategories.map((category) => {
-            const categoryItems = items.filter((item) => item.category === category);
+            const categoryItems = items.filter((item) => item.categoryId === category.id);
             return (
-              <section id={`categoria-${categorySlug(category)}`} className="menu-group" key={category} aria-labelledby={`heading-${categorySlug(category)}`} data-testid={`group-categoria-${categorySlug(category)}`}>
+              <section id={`categoria-${categorySlug(category.name)}`} className="menu-group" key={category.id} aria-labelledby={`heading-${categorySlug(category.name)}`} data-testid={`group-categoria-${categorySlug(category.name)}`}>
                 <div className="group-heading">
-                  <h3 id={`heading-${categorySlug(category)}`}>{category}</h3>
+                  <h3 id={`heading-${categorySlug(category.name)}`}>{category.name}</h3>
                   <span>{categoryItems.length} {categoryItems.length === 1 ? 'delícia' : 'delícias'}</span>
                 </div>
                 <div className="product-grid">
@@ -278,7 +203,7 @@ function App() {
 
           <aside className="fresh-note" data-testid="note-ingredientes">
             <span className="fresh-icon"><ArrowDown size={18} aria-hidden="true" /></span>
-            <span><strong>O que vem da feira, vem fresquinho.</strong><p>Nosso cardápio acompanha a estação. Pergunte pelo prato do dia quando falar com a gente.</p></span>
+            <span><strong>{restaurant.seasonalNoteTitle}</strong><p>{restaurant.seasonalNoteDescription}</p></span>
           </aside>
         </section>
       </main>
@@ -286,19 +211,19 @@ function App() {
       <footer id="contato" className="contact-section" data-testid="section-contato">
         <div className="contact-inner">
           <div>
-            <h2 className="contact-title">A gente espera por você.</h2>
-            <p className="contact-sub">Rua Harmonia, 184 · Vila Madalena, São Paulo — SP</p>
+            <h2 className="contact-title">{restaurant.contactTitle}</h2>
+            <p className="contact-sub">{restaurant.address}</p>
           </div>
           <div className="contact-links">
-            <a className="contact-link" href="tel:+5500000000000" data-testid="link-telefone">
-              <Phone size={17} aria-hidden="true" /><span><small>Ligue para nós</small><strong>+55 (00) 00000-0000</strong></span>
+            <a className="contact-link" href={contacts.phone.href} data-testid="link-telefone">
+              <Phone size={17} aria-hidden="true" /><span><small>{contacts.phone.label}</small><strong>{contacts.phone.displayValue}</strong></span>
             </a>
-            <a className="contact-link" href={`${whatsappBase}?text=${encodeURIComponent('Oi! Quero saber mais sobre o cardápio do Bistrô Pitanga.')}`} target="_blank" rel="noopener noreferrer" data-testid="link-whatsapp-contato">
-              <MessageCircle size={17} aria-hidden="true" /><span><small>WhatsApp</small><strong>+55 (00) 00000-0000</strong></span>
+            <a className="contact-link" href={`${whatsappBase}?text=${encodeURIComponent(contacts.whatsapp.generalMessage)}`} target="_blank" rel="noopener noreferrer" data-testid="link-whatsapp-contato">
+              <MessageCircle size={17} aria-hidden="true" /><span><small>{contacts.whatsapp.label}</small><strong>{contacts.whatsapp.displayValue}</strong></span>
             </a>
           </div>
         </div>
-        <div className="contact-bottom">Bistrô Pitanga · Feito com cuidado na Vila Madalena <span aria-label="número fictício">· Contatos fictícios para demonstração</span></div>
+        <div className="contact-bottom">{restaurant.name} · {restaurant.footerDescription} <span aria-label="número fictício">· {restaurant.footerDisclaimer}</span></div>
       </footer>
 
       {selectedItem && (
@@ -317,20 +242,20 @@ function App() {
               <X size={19} aria-hidden="true" />
             </button>
             <div className="dialog-content">
-              <span className="dialog-category">{selectedItem.category}</span>
+              <span className="dialog-category">{selectedCategory?.name}</span>
               <h2 id="dialog-title">{selectedItem.name}</h2>
               <p className="dialog-description" id="dialog-description">{selectedItem.detail}</p>
-              <div className="dialog-price-row"><span>Uma porção feita na hora</span><span className="dialog-price">{money(selectedItem.price)}</span></div>
+              <div className="dialog-price-row"><span>{restaurant.portionDescription}</span><span className="dialog-price">{money(selectedItem.price)}</span></div>
               <a
                 className="whatsapp-cta"
-                href={`${whatsappBase}?text=${encodeURIComponent(`Oi! Tenho interesse no ${selectedItem.name} do Bistrô Pitanga.`)}`}
+                href={`${whatsappBase}?text=${encodeURIComponent(`${contacts.whatsapp.productMessagePrefix}${selectedItem.name}${contacts.whatsapp.productMessageSuffix}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 data-testid={`link-whatsapp-produto-${selectedItem.id}`}
               >
-                <MessageCircle size={17} aria-hidden="true" /> Perguntar pelo WhatsApp
+                <MessageCircle size={17} aria-hidden="true" /> {contacts.whatsapp.ctaLabel}
               </a>
-              <p className="demo-caption">Contato fictício para demonstração</p>
+              <p className="demo-caption">{restaurant.productContactNotice}</p>
             </div>
           </section>
         </div>

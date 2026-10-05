@@ -1,0 +1,115 @@
+import bolinhoDeMandioca from '../assets/bolinho-de-mandioca.jpg';
+import boloFuba from '../assets/bolo-fuba.jpg';
+import brigadeiro from '../assets/brigadeiro.jpg';
+import carnePanela from '../assets/carne-panela.jpg';
+import frangoQuiabo from '../assets/frango-quiabo.jpg';
+import paoDeQueijo from '../assets/pao-de-queijo.jpg';
+import type { PublicMenuData } from '../types/menu';
+
+export const menuData: PublicMenuData = {
+  restaurant: {
+    name: 'Bistrô Pitanga',
+    brandTagline: 'comida de casa, feita aqui',
+    heroEyebrow: 'Cozinha de afeto, todo dia',
+    heroTitle: 'Um lugar gostoso de chamar de seu.',
+    heroDescription: 'Receitas brasileiras, ingredientes fresquinhos e aquele cuidado que dá para sentir em cada garfada.',
+    openingHours: 'Ter a dom · 11h30 às 22h',
+    location: 'Vila Madalena, SP',
+    heroNoteTitle: 'de verdade',
+    heroNoteDescription: 'feito com carinho',
+    menuTitle: 'À mesa',
+    menuDescription: 'Um pedacinho da nossa cozinha para você.',
+    menuBadge: 'feito na casa',
+    seasonalNoteTitle: 'O que vem da feira, vem fresquinho.',
+    seasonalNoteDescription: 'Nosso cardápio acompanha a estação. Pergunte pelo prato do dia quando falar com a gente.',
+    contactTitle: 'A gente espera por você.',
+    address: 'Rua Harmonia, 184 · Vila Madalena, São Paulo — SP',
+    footerDescription: 'Feito com cuidado na Vila Madalena',
+    footerDisclaimer: 'Contatos fictícios para demonstração',
+    portionDescription: 'Uma porção feita na hora',
+    productContactNotice: 'Contato fictício para demonstração',
+  },
+  contacts: {
+    phone: {
+      label: 'Ligue para nós',
+      displayValue: '+55 (00) 00000-0000',
+      href: 'tel:+5500000000000',
+    },
+    whatsapp: {
+      label: 'WhatsApp',
+      displayValue: '+55 (00) 00000-0000',
+      number: '5500000000000',
+      ctaLabel: 'Perguntar pelo WhatsApp',
+      generalMessage: 'Oi! Quero saber mais sobre o cardápio do Bistrô Pitanga.',
+      productMessagePrefix: 'Oi! Tenho interesse no ',
+      productMessageSuffix: ' do Bistrô Pitanga.',
+    },
+  },
+  categories: [
+    { id: 'pra-comecar', name: 'Pra começar' },
+    { id: 'da-nossa-cozinha', name: 'Da nossa cozinha' },
+    { id: 'pra-adocar', name: 'Pra adoçar' },
+  ],
+  items: [
+    {
+      id: 'pao-de-queijo',
+      name: 'Pão de queijo da casa',
+      categoryId: 'pra-comecar',
+      description: 'Casquinha dourada, miolo macio e queijo meia-cura.',
+      detail: 'Feito aqui todos os dias, com polvilho artesanal e queijo meia-cura de pequenos produtores. Vai quentinho para a mesa, do jeito que tem que ser.',
+      price: 18,
+      image: paoDeQueijo,
+      imageAlt: 'Pães de queijo dourados servidos em prato de cerâmica',
+    },
+    {
+      id: 'bolinho-mandioca',
+      name: 'Bolinho de mandioca',
+      categoryId: 'pra-comecar',
+      description: 'Mandioca cremosa, recheio da estação e pimenta da casa.',
+      detail: 'Mandioca cozida lentamente, temperos frescos e um recheio surpresa que muda com a feira. Crocante por fora, bem macio por dentro.',
+      price: 24,
+      image: bolinhoDeMandioca,
+      imageAlt: 'Bolinho de mandioca crocante com molho de pimenta',
+    },
+    {
+      id: 'frango-quiabo',
+      name: 'Frango com quiabo',
+      categoryId: 'da-nossa-cozinha',
+      description: 'Frango caipira, quiabo fresco e polenta cremosa.',
+      detail: 'Frango caipira dourado na panela, quiabo fresco sem pressa e polenta cremosa de milho amarelo. Um prato que pede mesa compartilhada.',
+      price: 42,
+      image: frangoQuiabo,
+      imageAlt: 'Frango ensopado com quiabo e polenta cremosa',
+    },
+    {
+      id: 'carne-panela',
+      name: 'Carne de panela',
+      categoryId: 'da-nossa-cozinha',
+      description: 'Cozida por horas, com purê de mandioca e ervas.',
+      detail: 'Acém de criação local, cebolas macias e molho encorpado de panela. Acompanha purê de mandioca feito na hora e ervas da horta.',
+      price: 48,
+      image: carnePanela,
+      imageAlt: 'Carne de panela com purê de mandioca e ervas frescas',
+    },
+    {
+      id: 'bolo-fuba',
+      name: 'Bolo de fubá com goiabada',
+      categoryId: 'pra-adocar',
+      description: 'Fatia generosa, bolo fofinho e goiabada cascão.',
+      detail: 'Nosso bolo de fubá tem casquinha dourada, interior leve e uma faixa generosa de goiabada cascão. Bom com café, melhor ainda sem pressa.',
+      price: 16,
+      image: boloFuba,
+      imageAlt: 'Fatia de bolo de fubá caseiro com goiabada',
+    },
+    {
+      id: 'brigadeiro',
+      name: 'Brigadeiro de colher',
+      categoryId: 'pra-adocar',
+      description: 'Chocolate intenso, feito devagar e finalizado à mão.',
+      detail: 'Chocolate brasileiro, leite condensado e uma pitada de sal. Mexido no fogo baixo até ficar brilhante e servido com granulado de verdade.',
+      price: 14,
+      image: brigadeiro,
+      imageAlt: 'Brigadeiros artesanais com granulado de chocolate',
+    },
+  ],
+};
