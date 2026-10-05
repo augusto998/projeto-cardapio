@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { withSupabase, type SupabaseContext } from "npm:@supabase/server@1";
 
 const allowedFields = new Set([
   "name",
@@ -26,23 +26,19 @@ type AttemptStatus =
   | "notification_pending"
   | "notified";
 
+type AdminClient = SupabaseContext["supabaseAdmin"];
+
 function jsonResponse(
   body: Record<string, unknown>,
   status: number,
-  origin: string | null,
-  allowedOrigins: Set<string>,
 ): Response {
-  const headers = new Headers({
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store",
-    "Vary": "Origin",
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
   });
-  if (origin && allowedOrigins.has(origin)) {
-    headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Headers", "authorization, apikey, content-type");
-    headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  }
-  return new Response(JSON.stringify(body), { status, headers });
 }
 
 function parseAllowedOrigins(): Set<string> {
@@ -173,12 +169,12 @@ function escapeHtml(value: string): string {
 }
 
 async function updateAttempt(
-  serviceClient: ReturnType<typeof createClient>,
+  adminClient: AdminClient,
   attemptId: string,
   status: AttemptStatus,
   authUserId: string | null = null,
 ): Promise<boolean> {
-  const { error } = await serviceClient.rpc("set_restaurant_provision_status", {
+  const { error } = await adminClient.rpc("set_restaurant_provision_status", {
     target_attempt_id: attemptId,
     target_status: status,
     target_auth_user_id: authUserId,
@@ -187,19 +183,19 @@ async function updateAttempt(
 }
 
 async function compensateAuthUser(
-  serviceClient: ReturnType<typeof createClient>,
+  adminClient: AdminClient,
   attemptId: string,
   authUserId: string,
 ): Promise<void> {
   let deletionFailed: boolean;
   try {
-    const { error } = await serviceClient.auth.admin.deleteUser(authUserId);
+    const { error } = await adminClient.auth.admin.deleteUser(authUserId);
     deletionFailed = Boolean(error);
   } catch {
     deletionFailed = true;
   }
   await updateAttempt(
-    serviceClient,
+    adminClient,
     attemptId,
     deletionFailed ? "compensation_required" : "compensated",
     authUserId,
@@ -230,41 +226,17 @@ async function sendOwnerAccessEmail(
   return response.ok;
 }
 
-Deno.serve(async (request: Request): Promise<Response> => {
-  const origin = request.headers.get("origin");
-  const allowedOrigins = parseAllowedOrigins();
-  if (origin && !allowedOrigins.has(origin)) {
-    return jsonResponse({ error: "Origem não autorizada." }, 403, null, allowedOrigins);
-  }
-  if (request.method === "OPTIONS") {
-    if (origin && allowedOrigins.has(origin)) {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": origin,
-          "Access-Control-Allow-Headers": "authorization, apikey, content-type",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Vary": "Origin",
-        },
-      });
-    }
-    return new Response(null, { status: 204 });
-  }
-  if (request.method !== "POST") {
-    return jsonResponse({ error: "Método não permitido." }, 405, origin, allowedOrigins);
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const provisionRequest = withSupabase(
+  { auth: "user", cors: "disabled" },
+  async (request, ctx): Promise<Response> => {
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
   const emailFrom = Deno.env.get("PROVISIONING_EMAIL_FROM");
   const redirectUrl = Deno.env.get("PROVISIONING_REDIRECT_URL");
+  const allowedOrigins = parseAllowedOrigins();
   if (
-    !supabaseUrl || !anonKey || !serviceRoleKey || !resendApiKey ||
-    !emailFrom || !redirectUrl || allowedOrigins.size === 0
+    !resendApiKey || !emailFrom || !redirectUrl
   ) {
-    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500, origin, allowedOrigins);
+    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500);
   }
   try {
     const parsedRedirectUrl = new URL(redirectUrl);
@@ -275,89 +247,77 @@ Deno.serve(async (request: Request): Promise<Response> => {
       throw new Error("invalid_redirect_url");
     }
   } catch {
-    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500, origin, allowedOrigins);
+    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500);
   }
 
-  const authorization = request.headers.get("authorization");
-  const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (!bearer) {
-    return jsonResponse({ error: "Autenticação obrigatória." }, 401, origin, allowedOrigins);
+  const userId = ctx.userClaims?.id;
+  if (!userId) {
+    return jsonResponse({ error: "Autenticação obrigatória." }, 401);
   }
 
-  const authClient = createClient(supabaseUrl, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-  const { data: authData, error: authError } = await authClient.auth.getUser(bearer);
-  if (authError || !authData.user) {
-    return jsonResponse({ error: "Autenticação obrigatória." }, 401, origin, allowedOrigins);
-  }
-
-  const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-  const { data: isPlatformAdmin, error: authorizationError } = await serviceClient.rpc(
+  const { data: isPlatformAdmin, error: authorizationError } = await ctx.supabaseAdmin.rpc(
     "is_platform_admin",
-    { target_user_id: authData.user.id },
+    { target_user_id: userId },
   );
   if (authorizationError) {
-    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500, origin, allowedOrigins);
+    return jsonResponse({ error: "Serviço temporariamente indisponível." }, 500);
   }
   if (!isPlatformAdmin) {
-    return jsonResponse({ error: "Acesso não autorizado." }, 403, origin, allowedOrigins);
+    return jsonResponse({ error: "Acesso não autorizado." }, 403);
   }
 
   let rawBody: unknown;
   try {
     rawBody = await readJsonBody(request);
   } catch {
-    return jsonResponse({ error: "Dados inválidos." }, 400, origin, allowedOrigins);
+    return jsonResponse({ error: "Dados inválidos." }, 400);
   }
 
   let input: ProvisioningInput;
   try {
     input = validateInput(rawBody);
   } catch {
-    return jsonResponse({ error: "Dados inválidos. Verifique os campos informados." }, 400, origin, allowedOrigins);
+    return jsonResponse({ error: "Dados inválidos. Verifique os campos informados." }, 400);
   }
 
   const attemptId = crypto.randomUUID();
-  const { error: beginError } = await serviceClient.rpc("begin_restaurant_provision", {
+  const { error: beginError } = await ctx.supabaseAdmin.rpc("begin_restaurant_provision", {
     target_attempt_id: attemptId,
-    target_platform_admin_user_id: authData.user.id,
+    target_platform_admin_user_id: userId,
     target_email: input.email,
   });
   if (beginError) {
-    return jsonResponse({ error: "Não foi possível iniciar o provisionamento." }, 500, origin, allowedOrigins);
+    return jsonResponse({ error: "Não foi possível iniciar o provisionamento." }, 500);
   }
 
-  const { data: createdAuth, error: createAuthError } = await serviceClient.auth.admin.createUser({
+  const { data: createdAuth, error: createAuthError } = await ctx.supabaseAdmin.auth.admin.createUser({
     email: input.email,
     password: randomPassword(),
     email_confirm: true,
     user_metadata: {},
   });
   if (createAuthError || !createdAuth.user) {
-    await updateAttempt(serviceClient, attemptId, "auth_creation_unknown");
+    await updateAttempt(ctx.supabaseAdmin, attemptId, "auth_creation_unknown");
     return jsonResponse({
       error: "Provisionamento pendente de reconciliação.",
       requestId: attemptId,
-    }, 502, origin, allowedOrigins);
+    }, 502);
   }
 
   const authUserId = createdAuth.user.id;
-  const { error: recordUserError } = await serviceClient.rpc(
+  const { error: recordUserError } = await ctx.supabaseAdmin.rpc(
     "record_restaurant_provision_auth_user",
     { target_attempt_id: attemptId, target_auth_user_id: authUserId },
   );
   if (recordUserError) {
-    await compensateAuthUser(serviceClient, attemptId, authUserId);
+    await compensateAuthUser(ctx.supabaseAdmin, attemptId, authUserId);
     return jsonResponse({
       error: "Não foi possível concluir o provisionamento.",
       requestId: attemptId,
-    }, 500, origin, allowedOrigins);
+    }, 500);
   }
 
-  const { error: finalizeError } = await serviceClient.rpc("finalize_restaurant_provision", {
+  const { error: finalizeError } = await ctx.supabaseAdmin.rpc("finalize_restaurant_provision", {
     target_attempt_id: attemptId,
     target_name: input.name,
     target_slug: input.slug,
@@ -366,41 +326,41 @@ Deno.serve(async (request: Request): Promise<Response> => {
     target_logo_url: input.logo_url,
   });
   if (finalizeError) {
-    const { data: attemptStates, error: stateError } = await serviceClient.rpc(
+    const { data: attemptStates, error: stateError } = await ctx.supabaseAdmin.rpc(
       "get_restaurant_provision_status",
       { target_attempt_id: attemptId },
     );
     const attemptState = Array.isArray(attemptStates) ? attemptStates[0] : null;
 
     if (stateError || !attemptState) {
-      await updateAttempt(serviceClient, attemptId, "database_commit_unknown", authUserId);
+      await updateAttempt(ctx.supabaseAdmin, attemptId, "database_commit_unknown", authUserId);
       return jsonResponse({
         status: "provisioning_reconciliation_required",
         requestId: attemptId,
-      }, 202, origin, allowedOrigins);
+      }, 202);
     }
 
     if (attemptState.status === "completed" && attemptState.restaurant_id) {
       // The transaction committed but its response was lost; do not delete its owner.
     } else if (attemptState.status === "auth_created") {
-      await compensateAuthUser(serviceClient, attemptId, authUserId);
+      await compensateAuthUser(ctx.supabaseAdmin, attemptId, authUserId);
       return jsonResponse({
         error: finalizeError.code === "23505"
           ? "Não foi possível provisionar: o slug pode já estar em uso."
           : "Não foi possível concluir o provisionamento.",
         requestId: attemptId,
-      }, finalizeError.code === "23505" ? 409 : 500, origin, allowedOrigins);
+      }, finalizeError.code === "23505" ? 409 : 500);
     } else {
       return jsonResponse({
         status: "provisioning_reconciliation_required",
         requestId: attemptId,
-      }, 202, origin, allowedOrigins);
+      }, 202);
     }
   }
 
   let actionLink: string | undefined;
   try {
-    const { data: linkData, error: linkError } = await serviceClient.auth.admin.generateLink({
+    const { data: linkData, error: linkError } = await ctx.supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email: input.email,
       options: { redirectTo: redirectUrl },
@@ -412,13 +372,57 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const sent = await sendOwnerAccessEmail(input.email, actionLink, resendApiKey, emailFrom);
     if (!sent) throw new Error("email_delivery_failed");
   } catch {
-    await updateAttempt(serviceClient, attemptId, "notification_pending", authUserId);
+    await updateAttempt(ctx.supabaseAdmin, attemptId, "notification_pending", authUserId);
     return jsonResponse({
       status: "provisioned_notification_pending",
       requestId: attemptId,
-    }, 202, origin, allowedOrigins);
+    }, 202);
   }
 
-  await updateAttempt(serviceClient, attemptId, "notified", authUserId);
-  return jsonResponse({ status: "provisioned", requestId: attemptId }, 201, origin, allowedOrigins);
+  await updateAttempt(ctx.supabaseAdmin, attemptId, "notified", authUserId);
+  return jsonResponse({ status: "provisioned", requestId: attemptId }, 201);
+});
+
+Deno.serve(async (request: Request): Promise<Response> => {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = parseAllowedOrigins();
+  if (origin && !allowedOrigins.has(origin)) {
+    return jsonResponse({ error: "Origem não autorizada." }, 403);
+  }
+  if (request.method === "OPTIONS") {
+    if (origin && allowedOrigins.has(origin)) {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": origin,
+          "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info, x-retry-count",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Vary": "Origin",
+        },
+      });
+    }
+    return new Response(null, { status: 204 });
+  }
+  if (request.method !== "POST") {
+    const response = jsonResponse({ error: "Método não permitido." }, 405);
+    if (origin && allowedOrigins.has(origin)) {
+      response.headers.set("Access-Control-Allow-Origin", origin);
+      response.headers.set("Vary", "Origin");
+    }
+    return response;
+  }
+
+  const response = await provisionRequest(request);
+  if (!origin || !allowedOrigins.has(origin)) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set("Access-Control-Allow-Origin", origin);
+  headers.set("Access-Control-Allow-Headers", "authorization, apikey, content-type, x-client-info, x-retry-count");
+  headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  headers.set("Vary", "Origin");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 });

@@ -7,10 +7,12 @@ sign-in link is sent after the restaurant and owner association commit.
 
 ## Required configuration
 
-Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
-`SUPABASE_SERVICE_ROLE_KEY` to deployed functions. Set the following values in
-the Edge Function secret manager; never put them in frontend variables or
-commit real values:
+The function uses the official `@supabase/server` package. The
+`withSupabase({ auth: "user" })` wrapper verifies the caller's JWT and provides
+the authenticated identity and scoped clients; the package manages
+Supabase-provided URL and key configuration. Never put privileged keys in
+frontend variables or commit real values. Set the following application
+secrets in the Edge Function environment:
 
 | Name | Purpose |
 | --- | --- |
@@ -19,17 +21,19 @@ commit real values:
 | `PROVISIONING_ALLOWED_ORIGINS` | Comma-separated exact browser origins allowed by CORS |
 | `PROVISIONING_REDIRECT_URL` | HTTPS application URL allowed by Supabase Auth redirects |
 
-An empty-value template is in `.env.example`. The first three Supabase values
-are normally injected by the platform; local development may require setting
-them in an untracked local environment file.
+An empty-value template is in `.env.example`. Supabase supplies the required
+project URL and API key configuration to hosted Edge Functions.
 
 ## Authorization and recovery
 
-The function verifies the caller's bearer token with Supabase Auth, then checks
-`private.platform_admins` through a server-only RPC. The SQL finalization RPC
-rechecks that authorization and atomically creates a private restaurant and
-its `owner` association. The new Auth user is rejected if it already has any
-`restaurant_admins` association.
+The `withSupabase({ auth: "user" })` wrapper validates the caller's bearer JWT;
+the function obtains the caller ID from `ctx.userClaims.id` and checks
+`private.platform_admins` through a server-only RPC using `ctx.supabaseAdmin`.
+The SQL finalization RPC rechecks that authorization and atomically creates a
+private restaurant and its `owner` association. The new Auth user is rejected
+if it already has any `restaurant_admins` association. `ctx.supabase` remains
+available for user-scoped operations subject to RLS; this provisioning flow
+uses the admin client only for operations that require server privileges.
 
 The Auth API and Postgres do not share a transaction. Each request therefore
 creates a private provisioning attempt before creating its Auth user. If the
