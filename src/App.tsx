@@ -166,7 +166,7 @@ function App() {
     const updateScrollState = () => {
       const isPastIntro = window.scrollY > 480;
       setShowBackToTop((current) => current === isPastIntro ? current : isPastIntro);
-      if (!isPastIntro) {
+      if (window.scrollY <= 140) {
         setActiveCategory((current) => current === 'Tudo' ? current : 'Tudo');
       }
     };
