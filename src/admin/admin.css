@@ -219,6 +219,27 @@
   color: #9b312b;
 }
 
+.admin-share-menu {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+}
+
+.admin-share-link {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #315743;
+  font-size: 14px;
+}
+
+.admin-qr-code {
+  display: inline-flex;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fff;
+}
+
 .admin-list {
   display: grid;
   gap: 8px;

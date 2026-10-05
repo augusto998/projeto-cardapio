@@ -9,6 +9,12 @@ const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currenc
 
 function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const appPathname = basePath && pathname.startsWith(`${basePath}/`)
+    ? pathname.slice(basePath.length)
+    : pathname === basePath
+      ? '/'
+      : pathname;
 
   useEffect(() => {
     const updatePathname = () => setPathname(window.location.pathname);
@@ -16,8 +22,8 @@ function App() {
     return () => window.removeEventListener('popstate', updatePathname);
   }, []);
 
-  if (pathname === '/admin' || pathname === '/admin/' || pathname === '/admin/dashboard') {
-    return <AdminApp pathname={pathname} />;
+  if (appPathname === '/admin' || appPathname === '/admin/' || appPathname === '/admin/dashboard') {
+    return <AdminApp pathname={appPathname} />;
   }
 
   return <PublicMenuApp />;
