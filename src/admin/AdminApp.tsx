@@ -38,6 +38,8 @@ type DashboardData = {
   products: Product[];
 };
 
+type CategoryOperation = 'create' | `update:${string}` | `delete:${string}` | null;
+
 type MembershipState =
   | { status: 'idle' | 'loading' }
   | { status: 'denied' }
@@ -63,6 +65,12 @@ function AdminApp({ pathname }: { pathname: string }) {
   const [password, setPassword] = useState('');
   const [signingIn, setSigningIn] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryOrder, setCategoryOrder] = useState('0');
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [categoryOperation, setCategoryOperation] = useState<CategoryOperation>(null);
+  const [categoryMessage, setCategoryMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const authEventVersion = useRef(0);
   const isDashboardPath = pathname === '/admin/dashboard';
 
@@ -232,6 +240,149 @@ function AdminApp({ pathname }: { pathname: string }) {
     }
   };
 
+  const resetCategoryForm = () => {
+    setCategoryName('');
+    setCategoryOrder('0');
+    setEditingCategoryId(null);
+    setShowCategoryForm(false);
+  };
+
+  const updateCategoryList = (
+    restaurantId: string,
+    update: (categories: Category[]) => Category[],
+    updateProducts: (products: Product[]) => Product[] = (products) => products,
+  ) => {
+    setMembership((current) => {
+      if (current.status !== 'ready' || current.data.restaurant.id !== restaurantId) return current;
+      return {
+        ...current,
+        data: {
+          ...current.data,
+          categories: update(current.data.categories).sort((a, b) => a.sort_order - b.sort_order),
+          products: updateProducts(current.data.products),
+        },
+      };
+    });
+  };
+
+  const handleCategorySubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase || membership.status !== 'ready') return;
+
+    const name = categoryName.trim();
+    const orderInput = categoryOrder.trim();
+    if (!orderInput) {
+      setCategoryMessage({ type: 'error', text: 'Informe a ordem da categoria.' });
+      return;
+    }
+    const sortOrder = Number(orderInput);
+    if (!name) {
+      setCategoryMessage({ type: 'error', text: 'Informe o nome da categoria.' });
+      return;
+    }
+    if (!Number.isFinite(sortOrder) || !Number.isInteger(sortOrder) || sortOrder < 0) {
+      setCategoryMessage({ type: 'error', text: 'A ordem deve ser um número inteiro igual ou maior que zero.' });
+      return;
+    }
+
+    const { restaurant } = membership.data;
+    const editingId = editingCategoryId;
+    const operation: CategoryOperation = editingId ? `update:${editingId}` : 'create';
+    setCategoryOperation(operation);
+    setCategoryMessage(null);
+
+    try {
+      let savedCategory: Category;
+      if (editingId) {
+        const { data, error } = await supabase
+          .from('categories')
+          .update({ name, sort_order: sortOrder })
+          .eq('id', editingId)
+          .eq('restaurant_id', restaurant.id)
+          .select('id, name, sort_order')
+          .returns<Category[]>()
+          .single();
+        if (error) throw error;
+        savedCategory = data;
+      } else {
+        const { data, error } = await supabase
+          .from('categories')
+          .insert({
+            restaurant_id: restaurant.id,
+            name,
+            sort_order: sortOrder,
+          })
+          .select('id, name, sort_order')
+          .returns<Category[]>()
+          .single();
+        if (error) throw error;
+        savedCategory = data;
+      }
+
+      updateCategoryList(restaurant.id, (categories) => editingId
+        ? categories.map((category) => category.id === editingId ? savedCategory : category)
+        : [...categories, savedCategory]);
+      resetCategoryForm();
+      setCategoryMessage({
+        type: 'success',
+        text: editingId ? 'Categoria atualizada.' : 'Categoria criada.',
+      });
+    } catch (error) {
+      setCategoryMessage({
+        type: 'error',
+        text: `Não foi possível salvar a categoria: ${getErrorMessage(error)}`,
+      });
+    } finally {
+      setCategoryOperation(null);
+    }
+  };
+
+  const beginCategoryEdit = (category: Category) => {
+    setEditingCategoryId(category.id);
+    setCategoryName(category.name);
+    setCategoryOrder(String(category.sort_order));
+    setShowCategoryForm(true);
+    setCategoryMessage(null);
+  };
+
+  const handleCategoryDelete = async (category: Category) => {
+    if (!supabase || membership.status !== 'ready') return;
+    if (!window.confirm(`Excluir a categoria "${category.name}"?`)) return;
+
+    const restaurantId = membership.data.restaurant.id;
+    setCategoryOperation(`delete:${category.id}`);
+    setCategoryMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', category.id)
+        .eq('restaurant_id', restaurantId)
+        .select('id')
+        .returns<Array<Pick<Category, 'id'>>>()
+        .single();
+      if (error) throw error;
+      if (!data) throw new Error('A categoria não foi encontrada neste restaurante.');
+
+      updateCategoryList(
+        restaurantId,
+        (categories) => categories.filter((item) => item.id !== data.id),
+        (products) => products.map((product) => product.category_id === data.id
+          ? { ...product, category_id: null }
+          : product),
+      );
+      setCategoryMessage({ type: 'success', text: 'Categoria excluída.' });
+    } catch (error) {
+      setCategoryMessage({
+        type: 'error',
+        text: `Não foi possível excluir a categoria: ${getErrorMessage(error)}`,
+      });
+    } finally {
+      setCategoryOperation(null);
+    }
+  };
+
   if (authLoading || (session && membership.status === 'idle')) {
     return <main className="admin-page"><p className="admin-message">Verificando sessão…</p></main>;
   }
@@ -337,17 +488,97 @@ function AdminApp({ pathname }: { pathname: string }) {
         {authError && <p className="admin-error" role="alert">{authError}</p>}
 
         <section className="admin-section" aria-labelledby="admin-categories-title">
-          <h2 id="admin-categories-title">Categorias</h2>
+          <div className="admin-section-heading">
+            <h2 id="admin-categories-title">Categorias</h2>
+            <button
+              className="admin-secondary-button"
+              type="button"
+              disabled={categoryOperation !== null}
+              onClick={() => {
+                if (showCategoryForm) {
+                  resetCategoryForm();
+                } else {
+                  setCategoryName('');
+                  setCategoryOrder('0');
+                  setEditingCategoryId(null);
+                  setShowCategoryForm(true);
+                }
+                setCategoryMessage(null);
+              }}
+            >
+              {showCategoryForm ? 'Cancelar' : 'Nova categoria'}
+            </button>
+          </div>
+          {categoryMessage && (
+            <p className={`admin-feedback is-${categoryMessage.type}`} role={categoryMessage.type === 'error' ? 'alert' : 'status'}>
+              {categoryMessage.text}
+            </p>
+          )}
+          {showCategoryForm && (
+            <form className="admin-form admin-category-form" onSubmit={(event) => void handleCategorySubmit(event)}>
+              <label htmlFor="admin-category-name">Nome</label>
+              <input
+                id="admin-category-name"
+                type="text"
+                required
+                maxLength={120}
+                value={categoryName}
+                onChange={(event) => setCategoryName(event.target.value)}
+                disabled={categoryOperation !== null}
+              />
+              <label htmlFor="admin-category-order">Ordem</label>
+              <input
+                id="admin-category-order"
+                type="number"
+                min="0"
+                step="1"
+                required
+                value={categoryOrder}
+                onChange={(event) => setCategoryOrder(event.target.value)}
+                disabled={categoryOperation !== null}
+              />
+              <div className="admin-category-form-actions">
+                <button className="admin-primary-button" type="submit" disabled={categoryOperation !== null}>
+                  {categoryOperation === 'create' || categoryOperation?.startsWith('update:')
+                    ? 'Salvando…'
+                    : editingCategoryId ? 'Salvar alterações' : 'Criar categoria'}
+                </button>
+                <button className="admin-secondary-button" type="button" onClick={resetCategoryForm} disabled={categoryOperation !== null}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
           {categories.length ? (
             <ul className="admin-list">
               {categories.map((category) => (
                 <li className="admin-list-row" key={category.id}>
                   <span>{category.name}</span>
-                  <span className="admin-sort-order">Ordem {category.sort_order}</span>
+                  <span className="admin-category-actions">
+                    <span className="admin-sort-order">Ordem {category.sort_order}</span>
+                    <button
+                      className="admin-category-action"
+                      type="button"
+                      disabled={categoryOperation !== null}
+                      onClick={() => beginCategoryEdit(category)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      className="admin-category-action is-danger"
+                      type="button"
+                      disabled={categoryOperation !== null}
+                      onClick={() => void handleCategoryDelete(category)}
+                    >
+                      {categoryOperation === `delete:${category.id}` ? 'Excluindo…' : 'Excluir'}
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>
-          ) : <p className="admin-message">Nenhuma categoria cadastrada.</p>}
+          ) : (
+            <p className="admin-message">Nenhuma categoria cadastrada.</p>
+          )}
         </section>
 
         <section className="admin-section" aria-labelledby="admin-products-title">

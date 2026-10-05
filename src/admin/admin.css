@@ -145,10 +145,55 @@
   margin-top: 30px;
 }
 
+.admin-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
 .admin-section h2 {
   margin: 0 0 14px;
   color: #244133;
   font: 600 23px Fraunces, Georgia, serif;
+}
+
+.admin-section-heading h2 {
+  margin: 0;
+}
+
+.admin-category-form {
+  margin: 0 0 16px;
+  padding: 18px;
+  border: 1px solid rgba(49, 87, 67, .12);
+  border-radius: 12px;
+  background: #fffdf8;
+}
+
+.admin-category-form-actions,
+.admin-category-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-category-form-actions .admin-primary-button {
+  margin-top: 4px;
+}
+
+.admin-feedback {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-feedback.is-success {
+  color: #275d3e;
+}
+
+.admin-feedback.is-error {
+  color: #9b312b;
 }
 
 .admin-list {
@@ -177,6 +222,30 @@
   white-space: nowrap;
 }
 
+.admin-category-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-category-action {
+  padding: 5px 8px;
+  border: 1px solid #d7ddd5;
+  border-radius: 7px;
+  color: #315743;
+  background: #fff;
+  font: 600 12px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.admin-category-action.is-danger {
+  color: #9b312b;
+}
+
+.admin-category-action:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
 .admin-product-details,
 .admin-product-meta {
   display: grid;
@@ -201,6 +270,8 @@
 @media (max-width: 560px) {
   .admin-page { padding: 24px 15px; }
   .admin-panel { padding: 24px 20px; }
+  .admin-list-row { align-items: flex-start; flex-direction: column; }
+  .admin-category-actions { justify-content: flex-start; }
   .admin-product-row { align-items: flex-start; flex-direction: column; }
   .admin-product-meta { justify-items: start; text-align: left; }
 }
