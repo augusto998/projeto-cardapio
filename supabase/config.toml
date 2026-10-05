@@ -1,0 +1,2 @@
+[functions.provision-restaurant]
+verify_jwt = true
