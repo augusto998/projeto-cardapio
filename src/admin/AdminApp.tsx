@@ -49,12 +49,22 @@ type DashboardData = {
 
 type CategoryOperation = 'create' | `update:${string}` | `delete:${string}` | null;
 type ProductOperation = 'create' | `update:${string}` | `delete:${string}` | `toggle:${string}` | null;
+type ProvisioningInput = {
+  name: string;
+  slug: string;
+  email: string;
+  telefone: string;
+  whatsapp: string;
+  logo_url: string;
+};
 
 type MembershipState =
-  | { status: 'idle' | 'loading' }
+  | { status: 'idle' }
+  | { status: 'loading' }
   | { status: 'denied' }
   | { status: 'multiple' }
   | { status: 'error'; message: string }
+  | { status: 'platform-admin' }
   | { status: 'ready'; data: DashboardData };
 
 function navigate(pathname: string) {
@@ -70,6 +80,12 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Ocorreu um erro inesperado.';
 }
 
+function getFunctionErrorStatus(error: unknown) {
+  if (!error || typeof error !== 'object' || !('context' in error)) return undefined;
+  const context = error.context;
+  return context instanceof Response ? context.status : undefined;
+}
+
 function AdminApp({ pathname }: { pathname: string }) {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -79,6 +95,10 @@ function AdminApp({ pathname }: { pathname: string }) {
   const [password, setPassword] = useState('');
   const [signingIn, setSigningIn] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [categoryName, setCategoryName] = useState('');
   const [categoryOrder, setCategoryOrder] = useState('0');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -109,6 +129,16 @@ function AdminApp({ pathname }: { pathname: string }) {
   const [restaurantSettingsSaving, setRestaurantSettingsSaving] = useState(false);
   const [restaurantSettingsMessage, setRestaurantSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [shareMessage, setShareMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [provisioningInput, setProvisioningInput] = useState<ProvisioningInput>({
+    name: '',
+    slug: '',
+    email: '',
+    telefone: '',
+    whatsapp: '',
+    logo_url: '',
+  });
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisioningMessage, setProvisioningMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const authEventVersion = useRef(0);
   const isDashboardPath = pathname === '/admin/dashboard';
 
@@ -164,12 +194,28 @@ function AdminApp({ pathname }: { pathname: string }) {
         const { data: associations, error: associationError } = await supabase
           .from('restaurant_admins')
           .select('restaurant_id, role')
-          .returns<AdminAssociation[]>()
-          .eq('user_id', session.user.id);
+          .eq('user_id', session.user.id)
+          .returns<AdminAssociation[]>();
 
         if (associationError) throw associationError;
         if (!associations?.length) {
-          if (isCurrent) setMembership({ status: 'denied' });
+          const { data, error } = await supabase.functions.invoke<{ status: string }>(
+            'provision-restaurant',
+            { method: 'GET' },
+          );
+          if (!isCurrent) return;
+          if (error) {
+            if (getFunctionErrorStatus(error) === 403) {
+              setMembership({ status: 'denied' });
+              return;
+            }
+            throw error;
+          }
+          if (data?.status === 'platform_admin') {
+            setMembership({ status: 'platform-admin' });
+          } else {
+            setMembership({ status: 'denied' });
+          }
           return;
         }
         if (associations.length !== 1) {
@@ -182,21 +228,21 @@ function AdminApp({ pathname }: { pathname: string }) {
           supabase
             .from('restaurants')
             .select('id, slug, name, description, logo_url, telefone, whatsapp, is_public')
-            .returns<Restaurant[]>()
             .eq('id', restaurantId)
+            .returns<Restaurant[]>()
             .maybeSingle(),
           supabase
             .from('categories')
             .select('id, name, sort_order')
-            .returns<Category[]>()
             .eq('restaurant_id', restaurantId)
-            .order('sort_order'),
+            .order('sort_order')
+            .returns<Category[]>(),
           supabase
             .from('products')
             .select('id, category_id, name, description, detail, price, image_url, image_alt, is_available, sort_order')
-            .returns<Product[]>()
             .eq('restaurant_id', restaurantId)
-            .order('sort_order'),
+            .order('sort_order')
+            .returns<Product[]>(),
         ]);
 
         if (restaurantResult.error) throw restaurantResult.error;
@@ -247,9 +293,17 @@ function AdminApp({ pathname }: { pathname: string }) {
   }, [session]);
 
   useEffect(() => {
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setPasswordMessage(null);
+  }, [session?.user.id]);
+
+  useEffect(() => {
     if (authLoading) return;
     if (isDashboardPath && !session) navigate('/admin');
-    if (!isDashboardPath && session && membership.status === 'ready') navigate('/admin/dashboard');
+    if (!isDashboardPath && session && (membership.status === 'ready' || membership.status === 'platform-admin')) {
+      navigate('/admin/dashboard');
+    }
   }, [authLoading, isDashboardPath, membership.status, session]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -284,6 +338,92 @@ function AdminApp({ pathname }: { pathname: string }) {
       setAuthError(`Não foi possível encerrar a sessão: ${getErrorMessage(error)}`);
     } finally {
       setSigningOut(false);
+    }
+  };
+
+  const handlePasswordUpdate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase || !session) return;
+    if (newPassword.length < 8) {
+      setPasswordMessage({ type: 'error', text: 'A senha deve ter pelo menos 8 caracteres.' });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMessage({ type: 'error', text: 'As senhas não coincidem.' });
+      return;
+    }
+
+    setPasswordSaving(true);
+    setPasswordMessage(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setPasswordMessage({ type: 'success', text: 'Senha atualizada. Use-a para seus próximos acessos.' });
+    } catch {
+      setPasswordMessage({ type: 'error', text: 'Não foi possível atualizar a senha. Confira os requisitos e tente novamente.' });
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
+  const handlePlatformProvision = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase || membership.status !== 'platform-admin') return;
+
+    setProvisioning(true);
+    setProvisioningMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ status: string }>(
+        'provision-restaurant',
+        { body: provisioningInput },
+      );
+      if (error) {
+        const status = getFunctionErrorStatus(error);
+        const message = status === 401
+          ? 'Sua sessão expirou. Entre novamente.'
+          : status === 403
+            ? 'Acesso restrito a administradores da plataforma.'
+            : status === 409
+              ? 'Não foi possível provisionar: o slug pode já estar em uso.'
+              : 'Não foi possível provisionar o restaurante. Verifique os dados ou tente novamente.';
+        throw new Error(message);
+      }
+
+      if (data?.status === 'provisioned') {
+        setProvisioningInput({
+          name: '',
+          slug: '',
+          email: '',
+          telefone: '',
+          whatsapp: '',
+          logo_url: '',
+        });
+        setProvisioningMessage({
+          type: 'success',
+          text: 'Restaurante criado como privado. O proprietário receberá um link de acesso por e-mail.',
+        });
+      } else if (data?.status === 'provisioned_notification_pending') {
+        setProvisioningMessage({
+          type: 'error',
+          text: 'Restaurante criado, mas o envio do acesso está pendente de reconciliação.',
+        });
+      } else {
+        setProvisioningMessage({
+          type: 'error',
+          text: 'O provisionamento ficou pendente de reconciliação. Não repita a solicitação sem verificar o estado.',
+        });
+      }
+    } catch (error) {
+      setProvisioningMessage({
+        type: 'error',
+        text: error instanceof Error
+          ? error.message
+          : 'Não foi possível provisionar o restaurante. Tente novamente.',
+      });
+    } finally {
+      setProvisioning(false);
     }
   };
 
@@ -744,6 +884,110 @@ function AdminApp({ pathname }: { pathname: string }) {
     return <main className="admin-page"><p className="admin-message">Verificando acesso ao restaurante…</p></main>;
   }
 
+  if (membership.status === 'platform-admin') {
+    if (!isDashboardPath) {
+      return <main className="admin-page"><p className="admin-message">Redirecionando para o painel…</p></main>;
+    }
+
+    return (
+      <main className="admin-page">
+        <div className="admin-dashboard">
+          <header className="admin-dashboard-header">
+            <div>
+              <p className="admin-eyebrow">Administração da plataforma</p>
+              <h1>Provisionar restaurante</h1>
+              <p className="admin-message">O restaurante começará privado. O proprietário receberá um link de acesso por e-mail.</p>
+            </div>
+            <button className="admin-secondary-button" type="button" onClick={() => void handleLogout()} disabled={signingOut}>
+              {signingOut ? 'Saindo…' : 'Sair'}
+            </button>
+          </header>
+
+          <section className="admin-section" aria-labelledby="platform-provision-title">
+            <h2 id="platform-provision-title">Novo restaurante</h2>
+            {provisioningMessage && (
+              <p
+                className={`admin-feedback is-${provisioningMessage.type}`}
+                role={provisioningMessage.type === 'error' ? 'alert' : 'status'}
+              >
+                {provisioningMessage.text}
+              </p>
+            )}
+            <form className="admin-form admin-platform-provision-form" onSubmit={(event) => void handlePlatformProvision(event)}>
+              <label htmlFor="platform-restaurant-name">Nome</label>
+              <input
+                id="platform-restaurant-name"
+                type="text"
+                maxLength={160}
+                autoComplete="organization"
+                required
+                value={provisioningInput.name}
+                onChange={(event) => setProvisioningInput((current) => ({ ...current, name: event.target.value }))}
+                disabled={provisioning}
+              />
+              <label htmlFor="platform-restaurant-slug">Slug</label>
+              <input
+                id="platform-restaurant-slug"
+                type="text"
+                maxLength={63}
+                autoComplete="off"
+                placeholder="bistro-pitanga"
+                required
+                value={provisioningInput.slug}
+                onChange={(event) => setProvisioningInput((current) => ({ ...current, slug: event.target.value }))}
+                disabled={provisioning}
+              />
+              <p className="admin-message">Será normalizado para uso no link público do cardápio.</p>
+              <label htmlFor="platform-owner-email">E-mail do proprietário</label>
+              <input
+                id="platform-owner-email"
+                type="email"
+                autoComplete="email"
+                maxLength={254}
+                required
+                value={provisioningInput.email}
+                onChange={(event) => setProvisioningInput((current) => ({ ...current, email: event.target.value }))}
+                disabled={provisioning}
+              />
+              <label htmlFor="platform-restaurant-phone">Telefone (opcional)</label>
+              <input
+                id="platform-restaurant-phone"
+                type="tel"
+                maxLength={40}
+                autoComplete="tel"
+                value={provisioningInput.telefone}
+                onChange={(event) => setProvisioningInput((current) => ({ ...current, telefone: event.target.value }))}
+                disabled={provisioning}
+              />
+              <label htmlFor="platform-restaurant-whatsapp">WhatsApp (opcional)</label>
+              <input
+                id="platform-restaurant-whatsapp"
+                type="tel"
+                maxLength={40}
+                value={provisioningInput.whatsapp}
+                onChange={(event) => setProvisioningInput((current) => ({ ...current, whatsapp: event.target.value }))}
+                disabled={provisioning}
+              />
+              <label htmlFor="platform-restaurant-logo">URL do logo HTTPS (opcional)</label>
+              <input
+                id="platform-restaurant-logo"
+                type="url"
+                maxLength={2048}
+                placeholder="https://..."
+                value={provisioningInput.logo_url}
+                onChange={(event) => setProvisioningInput((current) => ({ ...current, logo_url: event.target.value }))}
+                disabled={provisioning}
+              />
+              <button className="admin-primary-button" type="submit" disabled={provisioning}>
+                {provisioning ? 'Provisionando…' : 'Criar restaurante'}
+              </button>
+            </form>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   if (membership.status === 'denied' || membership.status === 'multiple' || membership.status === 'error') {
     const message = membership.status === 'denied'
       ? 'Esta conta não possui associação a um restaurante. O acesso ao painel foi negado.'
@@ -829,6 +1073,54 @@ function AdminApp({ pathname }: { pathname: string }) {
         </header>
 
         {authError && <p className="admin-error" role="alert">{authError}</p>}
+
+        <nav className="admin-section-nav" aria-label="Seções do painel">
+          <a href="#admin-account-security-title">Senha</a>
+          <a href="#admin-restaurant-settings-title">Restaurante</a>
+          <a href="#admin-share-menu-title">Compartilhar</a>
+          <a href="#admin-categories-title">Categorias</a>
+          <a href="#admin-products-title">Produtos</a>
+        </nav>
+
+        <section className="admin-section" aria-labelledby="admin-account-security-title">
+          <h2 id="admin-account-security-title">Senha de acesso</h2>
+          <p className="admin-message">Defina ou altere sua senha para entrar novamente sem depender do link inicial por e-mail.</p>
+          {passwordMessage && (
+            <p
+              className={`admin-feedback is-${passwordMessage.type}`}
+              role={passwordMessage.type === 'error' ? 'alert' : 'status'}
+            >
+              {passwordMessage.text}
+            </p>
+          )}
+          <form className="admin-form" onSubmit={(event) => void handlePasswordUpdate(event)}>
+            <label htmlFor="admin-new-password">Nova senha</label>
+            <input
+              id="admin-new-password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              disabled={passwordSaving}
+            />
+            <label htmlFor="admin-confirm-new-password">Confirme a nova senha</label>
+            <input
+              id="admin-confirm-new-password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              value={confirmNewPassword}
+              onChange={(event) => setConfirmNewPassword(event.target.value)}
+              disabled={passwordSaving}
+            />
+            <button className="admin-primary-button" type="submit" disabled={passwordSaving}>
+              {passwordSaving ? 'Salvando…' : 'Atualizar senha'}
+            </button>
+          </form>
+        </section>
 
         <section className="admin-section" aria-labelledby="admin-restaurant-settings-title">
           <h2 id="admin-restaurant-settings-title">Configurações do restaurante</h2>
