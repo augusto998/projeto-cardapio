@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Clock3, MapPin, MessageCircle, Phone, X } from 'lucide-react';
 import { menuData } from './data/menu';
+import { loadPublicMenuData } from './data/menuRepository';
 import type { MenuItem } from './types/menu';
 
-const { restaurant, contacts, categories: menuCategories, items } = menuData;
-const categories = ['Tudo', ...menuCategories.map((category) => category.name)];
-const whatsappBase = `https://wa.me/${contacts.whatsapp.number}`;
 const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function PitangaMark() {
@@ -21,15 +19,29 @@ function PitangaMark() {
 }
 
 function App() {
+  const [menu, setMenu] = useState(menuData);
   const [activeCategory, setActiveCategory] = useState('Tudo');
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const { restaurant, contacts, categories: menuCategories, items } = menu;
+  const categories = ['Tudo', ...menuCategories.map((category) => category.name)];
+  const whatsappBase = `https://wa.me/${contacts.whatsapp.number}`;
   const visibleCategories = menuCategories;
   const selectedCategory = selectedItem
     ? menuCategories.find((category) => category.id === selectedItem.categoryId)
     : undefined;
+
+  useEffect(() => {
+    let isCurrent = true;
+    void loadPublicMenuData().then((loadedMenu) => {
+      if (isCurrent) setMenu(loadedMenu);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedItem) return;
@@ -85,7 +97,7 @@ function App() {
 
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
-  }, []);
+  }, [visibleCategories]);
 
   useEffect(() => {
     const updateScrollState = () => {
@@ -185,7 +197,11 @@ function App() {
                         setSelectedItem(item);
                       }}
                     >
-                      <img className="product-photo" src={item.image} alt={item.imageAlt} loading="lazy" data-testid={`img-produto-${item.id}`} />
+                      {item.image ? (
+                        <img className="product-photo" src={item.image} alt={item.imageAlt} loading="lazy" data-testid={`img-produto-${item.id}`} />
+                      ) : (
+                        <span className="product-photo" aria-hidden="true" />
+                      )}
                       <span className="product-copy">
                         <span className="product-title-row">
                           <span className="product-title">{item.name}</span>
@@ -215,15 +231,22 @@ function App() {
             <p className="contact-sub">{restaurant.address}</p>
           </div>
           <div className="contact-links">
-            <a className="contact-link" href={contacts.phone.href} data-testid="link-telefone">
-              <Phone size={17} aria-hidden="true" /><span><small>{contacts.phone.label}</small><strong>{contacts.phone.displayValue}</strong></span>
-            </a>
-            <a className="contact-link" href={`${whatsappBase}?text=${encodeURIComponent(contacts.whatsapp.generalMessage)}`} target="_blank" rel="noopener noreferrer" data-testid="link-whatsapp-contato">
-              <MessageCircle size={17} aria-hidden="true" /><span><small>{contacts.whatsapp.label}</small><strong>{contacts.whatsapp.displayValue}</strong></span>
-            </a>
+            {contacts.phone.href && (
+              <a className="contact-link" href={contacts.phone.href} data-testid="link-telefone">
+                <Phone size={17} aria-hidden="true" /><span><small>{contacts.phone.label}</small><strong>{contacts.phone.displayValue}</strong></span>
+              </a>
+            )}
+            {contacts.whatsapp.number && (
+              <a className="contact-link" href={`${whatsappBase}?text=${encodeURIComponent(contacts.whatsapp.generalMessage)}`} target="_blank" rel="noopener noreferrer" data-testid="link-whatsapp-contato">
+                <MessageCircle size={17} aria-hidden="true" /><span><small>{contacts.whatsapp.label}</small><strong>{contacts.whatsapp.displayValue}</strong></span>
+              </a>
+            )}
           </div>
         </div>
-        <div className="contact-bottom">{restaurant.name} · {restaurant.footerDescription} <span aria-label="número fictício">· {restaurant.footerDisclaimer}</span></div>
+        <div className="contact-bottom">
+          {restaurant.name} · {restaurant.footerDescription}
+          {restaurant.footerDisclaimer && <span aria-label="número fictício"> · {restaurant.footerDisclaimer}</span>}
+        </div>
       </footer>
 
       {selectedItem && (
@@ -237,7 +260,11 @@ function App() {
             aria-describedby="dialog-description"
             data-testid={`dialog-produto-${selectedItem.id}`}
           >
-            <img className="dialog-image" src={selectedItem.image} alt={selectedItem.imageAlt} />
+            {selectedItem.image ? (
+              <img className="dialog-image" src={selectedItem.image} alt={selectedItem.imageAlt} />
+            ) : (
+              <div className="dialog-image" aria-hidden="true" />
+            )}
             <button ref={closeButtonRef} className="dialog-close" type="button" onClick={() => setSelectedItem(null)} aria-label="Fechar detalhes do prato" data-testid="button-fechar-detalhes">
               <X size={19} aria-hidden="true" />
             </button>
@@ -246,15 +273,17 @@ function App() {
               <h2 id="dialog-title">{selectedItem.name}</h2>
               <p className="dialog-description" id="dialog-description">{selectedItem.detail}</p>
               <div className="dialog-price-row"><span>{restaurant.portionDescription}</span><span className="dialog-price">{money(selectedItem.price)}</span></div>
-              <a
-                className="whatsapp-cta"
-                href={`${whatsappBase}?text=${encodeURIComponent(`${contacts.whatsapp.productMessagePrefix}${selectedItem.name}${contacts.whatsapp.productMessageSuffix}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid={`link-whatsapp-produto-${selectedItem.id}`}
-              >
-                <MessageCircle size={17} aria-hidden="true" /> {contacts.whatsapp.ctaLabel}
-              </a>
+              {contacts.whatsapp.number && (
+                <a
+                  className="whatsapp-cta"
+                  href={`${whatsappBase}?text=${encodeURIComponent(`${contacts.whatsapp.productMessagePrefix}${selectedItem.name}${contacts.whatsapp.productMessageSuffix}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid={`link-whatsapp-produto-${selectedItem.id}`}
+                >
+                  <MessageCircle size={17} aria-hidden="true" /> {contacts.whatsapp.ctaLabel}
+                </a>
+              )}
               <p className="demo-caption">{restaurant.productContactNotice}</p>
             </div>
           </section>

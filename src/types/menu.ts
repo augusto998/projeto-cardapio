@@ -1,6 +1,7 @@
 export type MenuCategory = {
   id: string;
   name: string;
+  sortOrder?: number;
 };
 
 export type MenuItem = {
@@ -12,6 +13,8 @@ export type MenuItem = {
   price: number;
   image: string;
   imageAlt: string;
+  isAvailable?: boolean;
+  sortOrder?: number;
 };
 
 export type RestaurantInfo = {
